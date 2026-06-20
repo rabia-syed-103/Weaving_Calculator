@@ -32,7 +32,7 @@ class HeadlineBanner extends StatelessWidget {
         children: [
           Expanded(
             child: _Stat(
-              label: 'Grey fabric rate',
+              label: 'Grey Fabric Rate',
               value: greyFabricRate.toStringAsFixed(2),
               unit: 'PKR / mtr',
               color: colorScheme.onPrimary,
@@ -46,7 +46,7 @@ class HeadlineBanner extends StatelessWidget {
           ),
           Expanded(
             child: _Stat(
-              label: 'Loom in flow',
+              label: 'Loom In Flow',
               value: loomInFlow.toStringAsFixed(0),
               unit: 'PKR / day',
               color: colorScheme.onPrimary,

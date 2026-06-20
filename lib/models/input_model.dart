@@ -8,6 +8,9 @@
 /// Additional Yarn fields are nullable — null means "not used", and the
 /// calculation_engine should treat null the same way the Excel sheet
 /// treats a blank cell (skip / treat as 0).
+///
+/// NOTE: `perPickRate` was removed (confirmed unused by any formula in
+/// calculation_engine.dart — it duplicated inputPerPick, which IS used).
 library;
 
 class InputModel {
@@ -42,7 +45,6 @@ class InputModel {
   final double totalOrder;
   final double inputInflow;
   final double targetPrice;
-  final double perPickRate;
   final double inputPerPick;
   final double packingCost;
   final double freightCost;
@@ -91,7 +93,6 @@ class InputModel {
     required this.totalOrder,
     required this.inputInflow,
     required this.targetPrice,
-    required this.perPickRate,
     required this.inputPerPick,
     required this.packingCost,
     required this.freightCost,
@@ -150,7 +151,6 @@ class InputModel {
     double? totalOrder,
     double? inputInflow,
     double? targetPrice,
-    double? perPickRate,
     double? inputPerPick,
     double? packingCost,
     double? freightCost,
@@ -194,9 +194,8 @@ class InputModel {
       totalOrder: totalOrder ?? this.totalOrder,
       inputInflow: inputInflow ?? this.inputInflow,
       targetPrice: targetPrice ?? this.targetPrice,
-      perPickRate: perPickRate ?? this.perPickRate,
-      packingCost: packingCost ?? this.packingCost,
       inputPerPick: inputPerPick ?? this.inputPerPick,
+      packingCost: packingCost ?? this.packingCost,
       freightCost: freightCost ?? this.freightCost,
       additionalWarpCount: additionalWarpCount ?? this.additionalWarpCount,
       additionalWeftCount: additionalWeftCount ?? this.additionalWeftCount,
@@ -253,7 +252,6 @@ class InputModel {
       'totalOrder': totalOrder,
       'inputInflow': inputInflow,
       'targetPrice': targetPrice,
-      'perPickRate': perPickRate,
       'inputPerPick': inputPerPick,
       'packingCost': packingCost,
       'freightCost': freightCost,
@@ -306,7 +304,6 @@ class InputModel {
       totalOrder: _d(json['totalOrder']),
       inputInflow: _d(json['inputInflow']),
       targetPrice: _d(json['targetPrice']),
-      perPickRate: _d(json['perPickRate']),
       inputPerPick: _d(json['inputPerPick']),
       packingCost: _d(json['packingCost']),
       freightCost: _d(json['freightCost']),
@@ -327,52 +324,4 @@ class InputModel {
 
   @override
   String toString() => 'InputModel(${toJson()})';
-}
-
-// ---------------------------------------------------------------------
-// Example / sanity check — delete this once you've confirmed it compiles.
-// Run with: dart run lib/models/input_model.dart
-// ---------------------------------------------------------------------
-void main() {
-  const example = InputModel(
-    warpBlend: '100% Cotton',
-    ply: 1,
-    warpCount: 20,
-    weftCount: 16,
-    endsPerInch: 60,
-    picksPerInch: 52,
-    width: 63,
-    weave: 'Plain',
-    selvedge: 'Plain',
-    writing: 'SadeedTex',
-    warpShrinkagePct: 8,
-    weftShrinkagePct: 6,
-    warpWastagePct: 3,
-    weftWastagePct: 2,
-    warpYarnRate: 350,
-    weftYarnRate: 330,
-    sizingCostPerKg: 25,
-    commissionPct: 2.5,
-    offGradePct: 1,
-    offGradeRecovery: 0.5,
-    loomRpm: 600,
-    loomEfficiencyPct: 85,
-    pickInsertion: 1,
-    widthsPerLoom: 1,
-    numberOfLooms: 10,
-    totalOrder: 50000,
-    inputInflow: 0,
-    targetPrice: 0,
-    perPickRate: 0,
-    inputPerPick: 0,
-
-    packingCost: 1.5,
-    freightCost: 2,
-  );
-
-  print(example);
-  print('Has additional yarn? ${example.hasAdditionalYarn}');
-
-  final roundTrip = InputModel.fromJson(example.toJson());
-  print('Round-trip matches: ${roundTrip.toJson().toString() == example.toJson().toString()}');
 }
