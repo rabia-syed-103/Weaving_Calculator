@@ -43,6 +43,7 @@ class InputModel {
   final double inputInflow;
   final double targetPrice;
   final double perPickRate;
+  final double inputPerPick;
   final double packingCost;
   final double freightCost;
 
@@ -91,6 +92,7 @@ class InputModel {
     required this.inputInflow,
     required this.targetPrice,
     required this.perPickRate,
+    required this.inputPerPick,
     required this.packingCost,
     required this.freightCost,
     // Section 2.1 — optional
@@ -149,6 +151,7 @@ class InputModel {
     double? inputInflow,
     double? targetPrice,
     double? perPickRate,
+    double? inputPerPick,
     double? packingCost,
     double? freightCost,
     double? additionalWarpCount,
@@ -193,6 +196,7 @@ class InputModel {
       targetPrice: targetPrice ?? this.targetPrice,
       perPickRate: perPickRate ?? this.perPickRate,
       packingCost: packingCost ?? this.packingCost,
+      inputPerPick: inputPerPick ?? this.inputPerPick,
       freightCost: freightCost ?? this.freightCost,
       additionalWarpCount: additionalWarpCount ?? this.additionalWarpCount,
       additionalWeftCount: additionalWeftCount ?? this.additionalWeftCount,
@@ -250,6 +254,7 @@ class InputModel {
       'inputInflow': inputInflow,
       'targetPrice': targetPrice,
       'perPickRate': perPickRate,
+      'inputPerPick': inputPerPick,
       'packingCost': packingCost,
       'freightCost': freightCost,
       'additionalWarpCount': additionalWarpCount,
@@ -302,6 +307,7 @@ class InputModel {
       inputInflow: _d(json['inputInflow']),
       targetPrice: _d(json['targetPrice']),
       perPickRate: _d(json['perPickRate']),
+      inputPerPick: _d(json['inputPerPick']),
       packingCost: _d(json['packingCost']),
       freightCost: _d(json['freightCost']),
       additionalWarpCount: _dOrNull(json['additionalWarpCount']),
@@ -358,6 +364,8 @@ void main() {
     inputInflow: 0,
     targetPrice: 0,
     perPickRate: 0,
+    inputPerPick: 0,
+
     packingCost: 1.5,
     freightCost: 2,
   );

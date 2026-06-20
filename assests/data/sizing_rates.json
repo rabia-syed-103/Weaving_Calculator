@@ -1,0 +1,1650 @@
+[
+  {
+    "key": "6/1 Ctn",
+    "count": 6,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 60.07535,
+    "perLbs": 27.25
+  },
+  {
+    "key": "6/1 Pc",
+    "count": 6,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "6/1 Pv",
+    "count": 6,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "6/1 Pp",
+    "count": 6,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "6/1 Cvc",
+    "count": 6,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "6/1 Viscose",
+    "count": 6,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "7/1 Ctn",
+    "count": 7,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 60.07535,
+    "perLbs": 27.25
+  },
+  {
+    "key": "7/1 Pc",
+    "count": 7,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "7/1 Pv",
+    "count": 7,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "7/1 Pp",
+    "count": 7,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "7/1 Cvc",
+    "count": 7,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "7/1 Viscose",
+    "count": 7,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "8/1 Ctn",
+    "count": 8,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 60.07535,
+    "perLbs": 27.25
+  },
+  {
+    "key": "8/1 Pc",
+    "count": 8,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "8/1 Pv",
+    "count": 8,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "8/1 Pp",
+    "count": 8,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "8/1 Cvc",
+    "count": 8,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "8/1 Viscose",
+    "count": 8,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "9/1 Ctn",
+    "count": 9,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 60.07535,
+    "perLbs": 27.25
+  },
+  {
+    "key": "9/1 Pc",
+    "count": 9,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "9/1 Pv",
+    "count": 9,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "9/1 Pp",
+    "count": 9,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "9/1 Cvc",
+    "count": 9,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "9/1 Viscose",
+    "count": 9,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "10/1 Ctn",
+    "count": 10,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 60.07535,
+    "perLbs": 27.25
+  },
+  {
+    "key": "10/1 Pc",
+    "count": 10,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "10/1 Pv",
+    "count": 10,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "10/1 Pp",
+    "count": 10,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "10/1 Cvc",
+    "count": 10,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "10/1 Viscose",
+    "count": 10,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "12/1 Ctn",
+    "count": 12,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "12/1 Pc",
+    "count": 12,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "12/1 Pv",
+    "count": 12,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "12/1 Pp",
+    "count": 12,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "12/1 Cvc",
+    "count": 12,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "12/1 Viscose",
+    "count": 12,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "13/1 Ctn",
+    "count": 13,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "13/1 Pc",
+    "count": 13,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "13/1 Pv",
+    "count": 13,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "13/1 Pp",
+    "count": 13,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "13/1 Cvc",
+    "count": 13,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "13/1 Viscose",
+    "count": 13,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "14/1 Ctn",
+    "count": 14,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "14/1 Pc",
+    "count": 14,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "14/1 Pv",
+    "count": 14,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "14/1 Pp",
+    "count": 14,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "14/1 Cvc",
+    "count": 14,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "14/1 Viscose",
+    "count": 14,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "16/1 Ctn",
+    "count": 16,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "16/1 Pc",
+    "count": 16,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "16/1 Pv",
+    "count": 16,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "16/1 Pp",
+    "count": 16,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "16/1 Cvc",
+    "count": 16,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "16/1 Viscose",
+    "count": 16,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 64.48455,
+    "perLbs": 29.25
+  },
+  {
+    "key": "18/1 Ctn",
+    "count": 18,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "18/1 Pc",
+    "count": 18,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "18/1 Pv",
+    "count": 18,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "18/1 Pp",
+    "count": 18,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "18/1 Cvc",
+    "count": 18,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "18/1 Viscose",
+    "count": 18,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "20/2 Ctn",
+    "count": 20,
+    "ply": 2,
+    "blend": "Ctn",
+    "perKg": 60.07535,
+    "perLbs": 27.25
+  },
+  {
+    "key": "20/2 Pc",
+    "count": 20,
+    "ply": 2,
+    "blend": "Pc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "20/2 Pv",
+    "count": 20,
+    "ply": 2,
+    "blend": "Pv",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "20/2 Pp",
+    "count": 20,
+    "ply": 2,
+    "blend": "Pp",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "20/2 Cvc",
+    "count": 20,
+    "ply": 2,
+    "blend": "Cvc",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "20/2 Viscose",
+    "count": 20,
+    "ply": 2,
+    "blend": "Viscose",
+    "perKg": 62.27995,
+    "perLbs": 28.25
+  },
+  {
+    "key": "20/1 Ctn",
+    "count": 20,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "20/1 Pc",
+    "count": 20,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "20/1 Pv",
+    "count": 20,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "20/1 Pp",
+    "count": 20,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "20/1 Cvc",
+    "count": 20,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "20/1 Viscose",
+    "count": 20,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "21/1 Ctn",
+    "count": 21,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "21/1 Pc",
+    "count": 21,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "21/1 Pv",
+    "count": 21,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "21/1 Pp",
+    "count": 21,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "21/1 Cvc",
+    "count": 21,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "21/1 Viscose",
+    "count": 21,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "22/1 Ctn",
+    "count": 22,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "22/1 Pc",
+    "count": 22,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "22/1 Pv",
+    "count": 22,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "22/1 Pp",
+    "count": 22,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "22/1 Cvc",
+    "count": 22,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "22/1 Viscose",
+    "count": 22,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "24/1 Ctn",
+    "count": 24,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "24/1 Pc",
+    "count": 24,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "24/1 Pv",
+    "count": 24,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "24/1 Pp",
+    "count": 24,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "24/1 Cvc",
+    "count": 24,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "24/1 Viscose",
+    "count": 24,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "26/1 Ctn",
+    "count": 26,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "26/1 Pc",
+    "count": 26,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "26/1 Pv",
+    "count": 26,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "26/1 Pp",
+    "count": 26,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "26/1 Cvc",
+    "count": 26,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "26/1 Viscose",
+    "count": 26,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "30/1 Ctn",
+    "count": 30,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "30/1 Pc",
+    "count": 30,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "30/1 Cvc",
+    "count": 30,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "30/1 Viscose",
+    "count": 30,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "30/1 Pp",
+    "count": 30,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "30/1 Pv",
+    "count": 30,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "31/1 Ctn",
+    "count": 31,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "31/1 Pc",
+    "count": 31,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "31/1 Cvc",
+    "count": 31,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "31/1 Viscose",
+    "count": 31,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "31/1 Pp",
+    "count": 31,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "31/1 Pv",
+    "count": 31,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "32/1 Ctn",
+    "count": 32,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "32/1 Pc",
+    "count": 32,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "32/1 Cvc",
+    "count": 32,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "32/1 Viscose",
+    "count": 32,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "32/1 Pp",
+    "count": 32,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "32/1 Pv",
+    "count": 32,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "36/1 Ctn",
+    "count": 36,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 78.81445,
+    "perLbs": 35.75
+  },
+  {
+    "key": "36/1 Pc",
+    "count": 36,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "36/1 Cvc",
+    "count": 36,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "36/1 Viscose",
+    "count": 36,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "36/1 Pp",
+    "count": 36,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "36/1 Pv",
+    "count": 36,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "38/1 Ctn",
+    "count": 38,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 78.81445,
+    "perLbs": 35.75
+  },
+  {
+    "key": "38/1 Pc",
+    "count": 38,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "38/1 Cvc",
+    "count": 38,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "38/1 Viscose",
+    "count": 38,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "38/1 Pp",
+    "count": 38,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "38/1 Pv",
+    "count": 38,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "40/2 Ctn",
+    "count": 40,
+    "ply": 2,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "40/2 Pc",
+    "count": 40,
+    "ply": 2,
+    "blend": "Pc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "40/2 Pv",
+    "count": 40,
+    "ply": 2,
+    "blend": "Pv",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "40/2 Pp",
+    "count": 40,
+    "ply": 2,
+    "blend": "Pp",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "40/2 Cvc",
+    "count": 40,
+    "ply": 2,
+    "blend": "Cvc",
+    "perKg": 65.0357,
+    "perLbs": 29.5
+  },
+  {
+    "key": "40/2 Viscose",
+    "count": 40,
+    "ply": 2,
+    "blend": "Viscose",
+    "perKg": 70.5472,
+    "perLbs": 32
+  },
+  {
+    "key": "40/1 Ctn",
+    "count": 40,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 78.81445,
+    "perLbs": 35.75
+  },
+  {
+    "key": "40/1 Pc",
+    "count": 40,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "40/1 Cvc",
+    "count": 40,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "40/1 Viscose",
+    "count": 40,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "40/1 Pp",
+    "count": 40,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "40/1 Pv",
+    "count": 40,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 96.45125,
+    "perLbs": 43.75
+  },
+  {
+    "key": "45/1 Ctn",
+    "count": 45,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 87.63285,
+    "perLbs": 39.75
+  },
+  {
+    "key": "45/1 Pc",
+    "count": 45,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "45/1 Cvc",
+    "count": 45,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "45/1 Viscose",
+    "count": 45,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "45/1 Pp",
+    "count": 45,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "45/1 Pv",
+    "count": 45,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "46/1 Ctn",
+    "count": 46,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 87.63285,
+    "perLbs": 39.75
+  },
+  {
+    "key": "46/1 Pc",
+    "count": 46,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "46/1 Cvc",
+    "count": 46,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "46/1 Viscose",
+    "count": 46,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "46/1 Pp",
+    "count": 46,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "46/1 Pv",
+    "count": 46,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 101.96275,
+    "perLbs": 46.25
+  },
+  {
+    "key": "50/1 Ctn",
+    "count": 50,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 98.1047,
+    "perLbs": 44.5
+  },
+  {
+    "key": "50/1 Pc",
+    "count": 50,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "50/1 Cvc",
+    "count": 50,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "50/1 Viscose",
+    "count": 50,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "50/1 Pp",
+    "count": 50,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "50/1 Pv",
+    "count": 50,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "52/1 Ctn",
+    "count": 52,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 98.1047,
+    "perLbs": 44.5
+  },
+  {
+    "key": "52/1 Pc",
+    "count": 52,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "52/1 Cvc",
+    "count": 52,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "52/1 Viscose",
+    "count": 52,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "52/1 Pp",
+    "count": 52,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "52/1 Pv",
+    "count": 52,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "54/1 Ctn",
+    "count": 54,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 98.1047,
+    "perLbs": 44.5
+  },
+  {
+    "key": "54/1 Pc",
+    "count": 54,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "54/1 Cvc",
+    "count": 54,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "54/1 Viscose",
+    "count": 54,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "54/1 Pp",
+    "count": 54,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "54/1 Pv",
+    "count": 54,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "60/2 Ctn",
+    "count": 60,
+    "ply": 2,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "60/2 Pc",
+    "count": 60,
+    "ply": 2,
+    "blend": "Pc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "60/2 Cvc",
+    "count": 60,
+    "ply": 2,
+    "blend": "Cvc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "60/2 Viscose",
+    "count": 60,
+    "ply": 2,
+    "blend": "Viscose",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "60/2 Pp",
+    "count": 60,
+    "ply": 2,
+    "blend": "Pp",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "60/2 Pv",
+    "count": 60,
+    "ply": 2,
+    "blend": "Pv",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "60/1 Ctn",
+    "count": 60,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 98.1047,
+    "perLbs": 44.5
+  },
+  {
+    "key": "60/1 Pc",
+    "count": 60,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "60/1 Cvc",
+    "count": 60,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "60/1 Viscose",
+    "count": 60,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "60/1 Pp",
+    "count": 60,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "60/1 Pv",
+    "count": 60,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "70/1 Ctn",
+    "count": 70,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 98.1047,
+    "perLbs": 44.5
+  },
+  {
+    "key": "70/1 Pc",
+    "count": 70,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "70/1 Cvc",
+    "count": 70,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "70/1 Viscose",
+    "count": 70,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "70/1 Pp",
+    "count": 70,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "70/1 Pv",
+    "count": 70,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "80/2 Ctn",
+    "count": 80,
+    "ply": 2,
+    "blend": "Ctn",
+    "perKg": 61.17765,
+    "perLbs": 27.75
+  },
+  {
+    "key": "80/2 Pc",
+    "count": 80,
+    "ply": 2,
+    "blend": "Pc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "80/2 Cvc",
+    "count": 80,
+    "ply": 2,
+    "blend": "Cvc",
+    "perKg": 72.20065,
+    "perLbs": 32.75
+  },
+  {
+    "key": "80/2 Viscose",
+    "count": 80,
+    "ply": 2,
+    "blend": "Viscose",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "80/2 Pp",
+    "count": 80,
+    "ply": 2,
+    "blend": "Pp",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "80/2 Pv",
+    "count": 80,
+    "ply": 2,
+    "blend": "Pv",
+    "perKg": 78.2633,
+    "perLbs": 35.5
+  },
+  {
+    "key": "80/1 Ctn",
+    "count": 80,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 106.9231,
+    "perLbs": 48.5
+  },
+  {
+    "key": "80/1 Pc",
+    "count": 80,
+    "ply": 1,
+    "blend": "Pc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "80/1 Cvc",
+    "count": 80,
+    "ply": 1,
+    "blend": "Cvc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "80/1 Viscose",
+    "count": 80,
+    "ply": 1,
+    "blend": "Viscose",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "80/1 Pp",
+    "count": 80,
+    "ply": 1,
+    "blend": "Pp",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "80/1 Pv",
+    "count": 80,
+    "ply": 1,
+    "blend": "Pv",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "100/1 Ctn",
+    "count": 100,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 114.6392,
+    "perLbs": 52
+  },
+  {
+    "key": "120/2 Ctn",
+    "count": 120,
+    "ply": 2,
+    "blend": "Ctn",
+    "perKg": 98.1047,
+    "perLbs": 44.5
+  },
+  {
+    "key": "120/2 Pc",
+    "count": 120,
+    "ply": 2,
+    "blend": "Pc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "120/2 Cvc",
+    "count": 120,
+    "ply": 2,
+    "blend": "Cvc",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "120/2 Viscose",
+    "count": 120,
+    "ply": 2,
+    "blend": "Viscose",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "120/2 Pp",
+    "count": 120,
+    "ply": 2,
+    "blend": "Pp",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "120/2 Pv",
+    "count": 120,
+    "ply": 2,
+    "blend": "Pv",
+    "perKg": 112.4346,
+    "perLbs": 51
+  },
+  {
+    "key": "120/1 Ctn",
+    "count": 120,
+    "ply": 1,
+    "blend": "Ctn",
+    "perKg": 114.6392,
+    "perLbs": 52
+  }
+]
