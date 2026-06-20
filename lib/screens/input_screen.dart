@@ -16,10 +16,12 @@ library;
 import 'package:flutter/material.dart';
 import '../calculations/calculation_engine.dart';
 import '../models/input_model.dart';
+import '../theme/costing_provider.dart';
+import 'package:provider/provider.dart';
 import '../services/sizing_rates_repository.dart';
 import '../widgets/headline_banner.dart';
+import 'main_nav_shell.dart';
 import '../widgets/input_field_card.dart';
-import '../widgets/settings_drawer.dart';
 
 class InputScreen extends StatefulWidget {
   const InputScreen({super.key});
@@ -89,30 +91,24 @@ class _InputScreenState extends State<InputScreen> {
   }
 
   void _recalculate() {
-    // Parse every numeric field. If anything is empty or invalid, bail out
-    // quietly — don't show 0/garbage values while the user is mid-typing.
     double? num(String key) => double.tryParse(_controllers[key]!.text.trim());
 
     final values = {
-      for (final key in _controllers.keys)
-        key: num(key),
+      for (final key in _controllers.keys) key: num(key),
     };
 
-    // Text fields don't go through num() — read them directly.
-    final warpBlend = _controllers['warpBlend']!.text.trim();
-    final weave = _controllers['weave']!.text.trim();
-    final selvedge = _controllers['selvedge']!.text.trim();
-    final writing = _controllers['writing']!.text.trim();
+    final warpBlend = _controllers["warpBlend"]!.text.trim();
+    final weave = _controllers["weave"]!.text.trim();
+    final selvedge = _controllers["selvedge"]!.text.trim();
+    final writing = _controllers["writing"]!.text.trim();
 
-    // Required numeric fields — if any of these are missing, we can't
-    // calculate yet (this is the normal case while the form is half-filled).
     const requiredNumericKeys = [
-      'ply', 'warpCount', 'weftCount', 'endsPerInch', 'picksPerInch', 'width',
-      'warpShrinkagePct', 'weftShrinkagePct', 'warpWastagePct', 'weftWastagePct',
-      'warpYarnRate', 'weftYarnRate', 'commissionPct', 'inputPerPick',
-      'perPickRate', 'packingCost', 'freightCost', 'offGradePct',
-      'offGradeRecovery', 'loomRpm', 'loomEfficiencyPct', 'pickInsertion',
-      'widthsPerLoom', 'numberOfLooms', 'totalOrder', 'inputInflow', 'targetPrice',
+      "ply", "warpCount", "weftCount", "endsPerInch", "picksPerInch", "width",
+      "warpShrinkagePct", "weftShrinkagePct", "warpWastagePct", "weftWastagePct",
+      "warpYarnRate", "weftYarnRate", "commissionPct", "inputPerPick",
+      "perPickRate", "packingCost", "freightCost", "offGradePct",
+      "offGradeRecovery", "loomRpm", "loomEfficiencyPct", "pickInsertion",
+      "widthsPerLoom", "numberOfLooms", "totalOrder", "inputInflow", "targetPrice",
     ];
     final missing = requiredNumericKeys.where((k) => values[k] == null).toList();
     if (warpBlend.isEmpty || weave.isEmpty || missing.isNotEmpty) {
@@ -120,62 +116,60 @@ class _InputScreenState extends State<InputScreen> {
         _greyFabricRate = 0;
         _loomInFlow = 0;
       });
+      context.read<CostingProvider>().clear();
       return;
     }
 
-    // Sizing Cost / Kg is read-only and comes from the lookup, not from
-    // what the user typed into that field — resolve it fresh every time.
     final rate = SizingRatesRepository.instance.lookup(
-      count: values['warpCount']!,
-      ply: values['ply']!,
+      count: values["warpCount"]!,
+      ply: values["ply"]!,
       blend: warpBlend,
     );
 
     if (rate == null) {
-      // No matching row in Sizing Rates — show 0 rather than crash.
-      // (Phase 5/Settings: surface a real "rate not found" message here.)
       setState(() {
         _greyFabricRate = 0;
         _loomInFlow = 0;
-        _controllers['sizingCostPerKg']!.text = '—';
+        _controllers["sizingCostPerKg"]!.text = "u2014";
       });
+      context.read<CostingProvider>().clear();
       return;
     }
-    _controllers['sizingCostPerKg']!.text = rate.perKg.toStringAsFixed(2);
+    _controllers["sizingCostPerKg"]!.text = rate.perKg.toStringAsFixed(2);
 
     final input = InputModel(
       warpBlend: warpBlend,
-      ply: values['ply']!,
-      warpCount: values['warpCount']!,
-      weftCount: values['weftCount']!,
-      endsPerInch: values['endsPerInch']!,
-      picksPerInch: values['picksPerInch']!,
-      width: values['width']!,
+      ply: values["ply"]!,
+      warpCount: values["warpCount"]!,
+      weftCount: values["weftCount"]!,
+      endsPerInch: values["endsPerInch"]!,
+      picksPerInch: values["picksPerInch"]!,
+      width: values["width"]!,
       weave: weave,
       selvedge: selvedge,
       writing: writing,
-      warpShrinkagePct: values['warpShrinkagePct']!,
-      weftShrinkagePct: values['weftShrinkagePct']!,
-      warpWastagePct: values['warpWastagePct']!,
-      weftWastagePct: values['weftWastagePct']!,
-      warpYarnRate: values['warpYarnRate']!,
-      weftYarnRate: values['weftYarnRate']!,
+      warpShrinkagePct: values["warpShrinkagePct"]!,
+      weftShrinkagePct: values["weftShrinkagePct"]!,
+      warpWastagePct: values["warpWastagePct"]!,
+      weftWastagePct: values["weftWastagePct"]!,
+      warpYarnRate: values["warpYarnRate"]!,
+      weftYarnRate: values["weftYarnRate"]!,
       sizingCostPerKg: rate.perKg,
-      commissionPct: values['commissionPct']!,
-      offGradePct: values['offGradePct']!,
-      offGradeRecovery: values['offGradeRecovery']!,
-      loomRpm: values['loomRpm']!,
-      loomEfficiencyPct: values['loomEfficiencyPct']!,
-      pickInsertion: values['pickInsertion']!,
-      widthsPerLoom: values['widthsPerLoom']!,
-      numberOfLooms: values['numberOfLooms']!,
-      totalOrder: values['totalOrder']!,
-      inputInflow: values['inputInflow']!,
-      targetPrice: values['targetPrice']!,
-      perPickRate: values['perPickRate']!,
-      packingCost: values['packingCost']!,
-      freightCost: values['freightCost']!,
-      inputPerPick: values['inputPerPick']!,
+      commissionPct: values["commissionPct"]!,
+      offGradePct: values["offGradePct"]!,
+      offGradeRecovery: values["offGradeRecovery"]!,
+      loomRpm: values["loomRpm"]!,
+      loomEfficiencyPct: values["loomEfficiencyPct"]!,
+      pickInsertion: values["pickInsertion"]!,
+      widthsPerLoom: values["widthsPerLoom"]!,
+      numberOfLooms: values["numberOfLooms"]!,
+      totalOrder: values["totalOrder"]!,
+      inputInflow: values["inputInflow"]!,
+      targetPrice: values["targetPrice"]!,
+      perPickRate: values["perPickRate"]!,
+      packingCost: values["packingCost"]!,
+      freightCost: values["freightCost"]!,
+      inputPerPick: values["inputPerPick"]!,
     );
 
     final output = CalculationEngine.calculate(
@@ -187,13 +181,17 @@ class _InputScreenState extends State<InputScreen> {
       _greyFabricRate = output.greyFabricRate;
       _loomInFlow = output.loomInFlow;
     });
+    context.read<CostingProvider>().update(output);
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const SettingsDrawer(),
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          tooltip: 'Open menu',
+          onPressed: () => scaffoldKey.currentState?.openDrawer(),
+        ),
         title: Row(
           children: [
             Container(
