@@ -28,6 +28,8 @@ import 'outputs_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/sidebar_drawer.dart';
+import '../models/history_entry_model.dart';
+import '../services/history_repository.dart';
 
 final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -41,6 +43,7 @@ class MainNavShell extends StatefulWidget {
 class _MainNavShellState extends State<MainNavShell> {
   int _currentIndex = 0;
   int _outputsSubTab = 0;
+  int _historyRefreshKey = 0;
 
   void _handleDrawerNavigate(DrawerDestination destination, {int? outputsSubTab}) {
     setState(() {
@@ -52,6 +55,7 @@ class _MainNavShellState extends State<MainNavShell> {
           if (outputsSubTab != null) _outputsSubTab = outputsSubTab;
         case DrawerDestination.history:
           _currentIndex = 2;
+          _historyRefreshKey++;
         case DrawerDestination.settings:
           _currentIndex = 3;
       }
@@ -69,8 +73,9 @@ class _MainNavShellState extends State<MainNavShell> {
           : OutputsScreen(
               output: liveOutput,
               initialSubTab: _outputsSubTab,
+              onSave: () => _saveToHistory(context),
             ),
-      const HistoryScreen(),
+      HistoryScreen(key: ValueKey(_historyRefreshKey)),
       const SettingsScreen(),
     ];
 
@@ -84,7 +89,10 @@ class _MainNavShellState extends State<MainNavShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
+          setState(() {
+            _currentIndex = index;
+            if (index == 2) _historyRefreshKey++;
+          });
         },
         destinations: const [
           NavigationDestination(
@@ -109,6 +117,27 @@ class _MainNavShellState extends State<MainNavShell> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Saves the current live calculation (input + output from
+  /// CostingProvider) into local history, then shows a confirmation
+  /// snackbar. Only callable when liveOutput/lastInput are non-null —
+  /// OutputsScreen only shows its save button when onSave is provided,
+  /// and we only pass onSave when liveOutput is non-null (see build()).
+  Future<void> _saveToHistory(BuildContext context) async {
+    final costingProvider = context.read<CostingProvider>();
+    final input = costingProvider.lastInput;
+    final output = costingProvider.output;
+    if (input == null || output == null) return;
+
+    await HistoryRepository.instance.save(
+      HistoryEntry.now(input: input, output: output),
+    );
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Saved to History")),
     );
   }
 }

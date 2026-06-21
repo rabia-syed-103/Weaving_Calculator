@@ -35,11 +35,13 @@ import 'cover_factor_tab.dart';
 class OutputsScreen extends StatefulWidget {
   final OutputModel output;
   final int initialSubTab;
+  final VoidCallback? onSave;
 
   const OutputsScreen({
     super.key,
     required this.output,
     this.initialSubTab = 0,
+    this.onSave,
   });
 
   @override
@@ -86,6 +88,14 @@ class _OutputsScreenState extends State<OutputsScreen>
           onPressed: () => scaffoldKey.currentState?.openDrawer(),
         ),
         title: const Text('Outputs'),
+        actions: [
+          if (widget.onSave != null)
+            IconButton(
+              icon: const Icon(Icons.bookmark_add_outlined),
+              tooltip: 'Save to History',
+              onPressed: widget.onSave,
+            ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
