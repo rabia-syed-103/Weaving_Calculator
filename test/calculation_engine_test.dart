@@ -52,7 +52,6 @@ void main() {
     totalOrder: 50000,
     inputInflow: 25000,
     targetPrice: 244.42,
-    perPickRate: 0,
     inputPerPick: 0.691512,
     packingCost: 0,
     freightCost: 0,

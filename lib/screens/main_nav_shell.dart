@@ -21,57 +21,15 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../theme/costing_provider.dart';
 import 'input_screen.dart';
 import 'outputs_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
-import '../models/output_model.dart';
 import '../widgets/sidebar_drawer.dart';
 
 final scaffoldKey = GlobalKey<ScaffoldState>();
-
-// TODO(wiring): placeholder so OutputsScreen has something to render
-// before Phase 4 wires it to InputScreen's live calculation result.
-// Delete once the shared OutputModel provider exists.
-final OutputModel _exampleOutput = OutputModel(
-  greyFabricRate: 251.70,
-  loomInFlow: 29909.87,
-  yarnWarpCost: 106.19,
-  yarnWeftCost: 83.49,
-  totalYarnCost: 189.68,
-  sizingCostPerMtr: 4.31,
-  weavingCost: 59.47,
-  offGradePct: 0.05,
-  commissionCost: 2.49,
-  warpWeightShrinkageWastage: 0.1609,
-  weftWeightShrinkageWastage: 0.1265,
-  additionalWarpWeightShrinkageWastage: 0,
-  additionalWeftWeightShrinkageWastage: 0,
-  warpWeightOnlyShrinkage: 0.1553,
-  weftWeightOnlyShrinkage: 0.1309,
-  additionalWarpWeightOnlyShrinkage: 0,
-  additionalWeftWeightOnlyShrinkage: 0,
-  warpKgPerMtr: 0.0704,
-  totalPicks: 86,
-  perDayPerLoomProduction: 568.42,
-  dailyProductionAllLooms: 2842.09,
-  daysRequiredForCompletion: 17.59,
-  completionDate: DateTime(2026, 7, 9),
-  warpBagsRequired: 8045,
-  secondWarpBagsRequired: 0,
-  weftBagsRequired: 6325,
-  secondWeftBagsRequired: 0,
-  coverFactorWarp: 13.17,
-  coverFactorSecondWarp: 0,
-  coverFactorWeft: 11.10,
-  coverFactorSecondWeft: 0,
-  totalCoverFactor: 24.27,
-  reedSpaceInches: 64.69,
-  tapeLengthMtr: 104.30,
-  wtGramsPerMetre: 0.1257,
-  container20ftMtrs: 103443,
-  container40ftMtrs: 206885,
-);
 
 class MainNavShell extends StatefulWidget {
   const MainNavShell({super.key});
@@ -102,14 +60,16 @@ class _MainNavShellState extends State<MainNavShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Built inline (not as a const list) because OutputsScreen now needs
-    // _outputsSubTab, which changes at runtime via the drawer.
+    final liveOutput = context.watch<CostingProvider>().output;
+
     final screens = [
       const InputScreen(),
-      OutputsScreen(
-        output: _exampleOutput,
-        initialSubTab: _outputsSubTab,
-      ),
+      liveOutput == null
+          ? const _NoCalculationYet()
+          : OutputsScreen(
+              output: liveOutput,
+              initialSubTab: _outputsSubTab,
+            ),
       const HistoryScreen(),
       const SettingsScreen(),
     ];
@@ -148,6 +108,62 @@ class _MainNavShellState extends State<MainNavShell> {
             label: 'Settings',
           ),
         ],
+      ),
+    );
+  }
+}
+/// Shown in the Outputs tab when no calculation has run yet — i.e. the
+/// Costing form is empty or incomplete, so CostingProvider.output is
+/// still null. Mirrors the empty-state style used elsewhere in the app
+/// (HistoryScreen's "no saved calculations" state).
+class _NoCalculationYet extends StatelessWidget {
+  const _NoCalculationYet();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          tooltip: 'Open menu',
+          onPressed: () => scaffoldKey.currentState?.openDrawer(),
+        ),
+        title: const Text('Outputs'),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.bar_chart_outlined,
+                size: 48,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No calculation yet',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Fill in the Costing form to see results here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
