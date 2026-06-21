@@ -6,10 +6,13 @@ import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 import 'theme/costing_provider.dart';
 import 'screens/main_nav_shell.dart';
+import 'services/history_repository.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   await SizingRatesRepository.instance.init();
+  await HistoryRepository.instance.init();
   runApp(
     MultiProvider(
       providers: [

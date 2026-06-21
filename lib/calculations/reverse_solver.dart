@@ -98,6 +98,17 @@ class ReverseSolver {
 
   /// Mirrors VBA Sub Target_Price().
   /// Solves Input Per Pick so that Grey Fabric Rate == [targetPrice].
+  ///
+  /// BUG FIX (verified against the actual VBA source): the original
+  /// Target_Price() macro has its vSizing read commented out —
+  ///   '        vSizing = Round(.Range("H6").Value, 2)
+  /// — so vSizing stays at VBA's Dim default of 0 for this Sub. This is
+  /// DIFFERENT from solveForInFlow() above, which DOES read vSizing.
+  /// Earlier versions of this file read sizingCostPerMtr here too,
+  /// which caused Target Price mode to be off by a constant amount
+  /// (verified: ~8 unit gap in Input Per Pick, traced directly to this
+  /// line). Do not "fix" this by reading sizingCostPerMtr again — it is
+  /// intentionally 0 here, matching the commented-out VBA line exactly.
   static ReverseSolverResult solveForTargetPrice({
     required InputModel input,
     required double sizingCostPerKg,
@@ -107,7 +118,7 @@ class ReverseSolver {
 
     final vTarget = _round(targetPrice, 4);
     final vYarn = _round(fixed.totalYarnCost, 2);
-    final vSizing = _round(fixed.sizingCostPerMtr, 2);
+    const vSizing = 0.0; // VBA's read of this is commented out — stays at Dim default 0
     final vOffGrade = _round(fixed.offGradePct, 2);
     final vPacking = _round(input.packingCost, 2);
     final vFreight = _round(input.freightCost, 6);

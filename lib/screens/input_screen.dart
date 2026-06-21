@@ -56,6 +56,7 @@ import '../services/sizing_rates_repository.dart';
 import '../theme/costing_provider.dart';
 import '../widgets/headline_banner.dart';
 import '../widgets/input_field_card.dart';
+import '../widgets/share_action_button.dart';
 import 'main_nav_shell.dart';
 
 const List<String> kWarpBlendOptions = ['Ctn', 'Pc', 'Pv', 'Pp', 'Cvc', 'Viscose'];
@@ -275,7 +276,7 @@ class _InputScreenState extends State<InputScreen> {
       _greyFabricRate = output.greyFabricRate;
       _loomInFlow = output.loomInFlow;
 
-      Future.microtask(() => context.read<CostingProvider>().update(output));
+      Future.microtask(() => context.read<CostingProvider>().update(input, output));
     });
   }
 
@@ -320,6 +321,7 @@ class _InputScreenState extends State<InputScreen> {
             const Text('SadeedTex', style: TextStyle(fontSize: 16)),
           ],
         ),
+        actions: const [ShareActionButton()],
       ),
       body: Form(
         key: _formKey,
