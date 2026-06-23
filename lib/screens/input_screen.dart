@@ -45,6 +45,18 @@
 /// because inputPerPick only feeds the FORWARD formula
 /// (calculation_engine.dart), not the reverse solver. Only the inflow/
 /// targetPrice listeners call the solver, so there is no cycle.
+///
+/// STEP 17 — TAP TO RELOAD:
+/// didChangeDependencies() fires whenever Provider's InheritedWidget
+/// rebuilds — including the moment CostingProvider.requestReload() calls
+/// notifyListeners() from HistoryScreen. It reads pendingReload; if
+/// non-null, it consumes it immediately (so a later rebuild can't apply
+/// the same entry twice) and fills every controller via
+/// _fillControllersFrom(). That fill relies on each controller's own
+/// listener to trigger _recalculate() as values are set — no separate
+/// guard or explicit recalculate call is needed, since the LAST field
+/// set in the loop will be the one whose listener fires last and runs
+/// the calculation with every other field already in place.
 library;
 
 import 'package:flutter/material.dart';
@@ -137,6 +149,70 @@ class _InputScreenState extends State<InputScreen> {
       entry.value.dispose();
     }
     super.dispose();
+  }
+
+  /// Watches CostingProvider for a pending reload request (set when the
+  /// user taps a History card). Fills all controllers from the stored
+  /// InputModel, then calls consumeReload() to clear the pending state.
+  ///
+  /// IMPORTANT — must use context.watch() here, not context.read().
+  /// InputScreen lives inside MainNavShell's IndexedStack, which keeps
+  /// it alive (never disposed/recreated) when switching tabs — that's
+  /// the whole point of IndexedStack, so the 28 controllers don't reset
+  /// every time the user looks at another tab. But it means
+  /// didChangeDependencies() does NOT get a fresh natural trigger just
+  /// from switching back to the Costing tab; it only re-runs when an
+  /// InheritedWidget this widget actually DEPENDS ON changes. read()
+  /// grabs a value once without subscribing, so the widget never
+  /// becomes a dependent of CostingProvider, and requestReload()'s
+  /// notifyListeners() call goes unnoticed. watch() subscribes properly,
+  /// so this method re-fires the moment HistoryScreen calls
+  /// requestReload() — which is also why the History tab doesn't need
+  /// to be visited for the reload to take effect.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final pending = context.watch<CostingProvider>().pendingReload;
+    if (pending == null) return;
+    context.read<CostingProvider>().consumeReload();
+    _fillControllersFrom(pending);
+  }
+
+  /// Fills every controller (and _warpBlend dropdown) from a saved
+  /// InputModel — used by "tap to reload" (Step 17).
+  void _fillControllersFrom(InputModel input) {
+    _warpBlend = input.warpBlend;
+    _controllers['ply']!.text = input.ply.toString();
+    _controllers['warpCount']!.text = input.warpCount.toString();
+    _controllers['weftCount']!.text = input.weftCount.toString();
+    _controllers['endsPerInch']!.text = input.endsPerInch.toString();
+    _controllers['picksPerInch']!.text = input.picksPerInch.toString();
+    _controllers['width']!.text = input.width.toString();
+    _controllers['weave']!.text = input.weave;
+    _controllers['selvedge']!.text = input.selvedge;
+    _controllers['writing']!.text = input.writing;
+    _controllers['warpShrinkagePct']!.text = input.warpShrinkagePct.toString();
+    _controllers['weftShrinkagePct']!.text = input.weftShrinkagePct.toString();
+    _controllers['warpWastagePct']!.text = input.warpWastagePct.toString();
+    _controllers['weftWastagePct']!.text = input.weftWastagePct.toString();
+    _controllers['warpYarnRate']!.text = input.warpYarnRate.toString();
+    _controllers['weftYarnRate']!.text = input.weftYarnRate.toString();
+    _controllers['commissionPct']!.text = input.commissionPct.toString();
+    _controllers['inputPerPick']!.text = input.inputPerPick.toString();
+    _controllers['packingCost']!.text = input.packingCost.toString();
+    _controllers['freightCost']!.text = input.freightCost.toString();
+    _controllers['offGradePct']!.text = input.offGradePct.toString();
+    _controllers['offGradeRecovery']!.text = input.offGradeRecovery.toString();
+    _controllers['loomRpm']!.text = input.loomRpm.toString();
+    _controllers['loomEfficiencyPct']!.text = input.loomEfficiencyPct.toString();
+    _controllers['pickInsertion']!.text = input.pickInsertion.toString();
+    _controllers['widthsPerLoom']!.text = input.widthsPerLoom.toString();
+    _controllers['numberOfLooms']!.text = input.numberOfLooms.toString();
+    _controllers['totalOrder']!.text = input.totalOrder.toString();
+    _controllers['inputInflow']!.text = input.inputInflow.toString();
+    _controllers['targetPrice']!.text = input.targetPrice.toString();
+    // sizingCostPerKg is read-only (lookup result), don't fill it —
+    // it will auto-update when _recalculate() runs from the listeners.
   }
 
   void _startVoiceInput() {

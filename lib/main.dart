@@ -13,16 +13,28 @@ void main() async {
   await Hive.initFlutter();
   await SizingRatesRepository.instance.init();
   await HistoryRepository.instance.init();
+
+  // CHANGED: ThemeProvider now persists accent + light/dark mode via
+  // Hive, so it has to be built asynchronously (it needs to open its
+  // box and read back whatever was saved last time) BEFORE runApp,
+  // instead of being constructed inline as
+  // ChangeNotifierProvider(create: (_) => ThemeProvider()).
+  // ChangeNotifierProvider.value(...) is used below to hand this
+  // already-built instance to the widget tree, rather than asking
+  // Provider to create a fresh (un-loaded) one itself.
+  final themeProvider = await ThemeProvider.load();
+
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider.value(value: themeProvider),
         ChangeNotifierProvider(create: (_) => CostingProvider()),
       ],
       child: const SadeedTexApp(),
     ),
   );
 }
+
 class SadeedTexApp extends StatelessWidget {
   const SadeedTexApp({super.key});
   @override

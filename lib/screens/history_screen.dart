@@ -1,24 +1,30 @@
 /// history_screen.dart
 /// -----------------------------------------------------------------------
-/// Real History screen — Sara's Step 16. Lists every saved calculation
-/// (HistoryEntry = InputModel + OutputModel + timestamp) from
-/// HistoryRepository, newest first, as cards matching the original
-/// project mockup style (fabric blend, date, rate, width badges).
+/// History screen — lists every saved calculation (HistoryEntry =
+/// InputModel + OutputModel + timestamp) from HistoryRepository, newest
+/// first, as cards.
 ///
-/// SCOPE NOTE: this screen reads + deletes entries (delete included here
-/// since it was trivial alongside the read logic). "Tap to reload" —
-/// loading a card's InputModel back into the Costing form — is still
-/// Rabia's Step 17 and is NOT implemented here; tapping a card currently
-/// does nothing. Look for the TODO in _HistoryCard's onTap.
+/// Step 17 (tap to reload) is now implemented: tapping a card calls
+/// CostingProvider.requestReload(entry.input), then switches the bottom
+/// nav to the Costing tab (index 0) via the onReload callback passed in
+/// from MainNavShell. InputScreen's didChangeDependencies() picks up the
+/// pending reload from CostingProvider and fills all its controllers.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'main_nav_shell.dart';
 import '../models/history_entry_model.dart';
 import '../services/history_repository.dart';
+import '../theme/costing_provider.dart';
 
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  /// Called after a reload is requested — switches the bottom nav back
+  /// to the Costing tab so the user can see their loaded values.
+  /// Provided by MainNavShell.
+  final VoidCallback? onReload;
+
+  const HistoryScreen({super.key, this.onReload});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -46,6 +52,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Deleted from History')),
     );
+  }
+
+  void _reloadEntry(HistoryEntry entry) {
+    context.read<CostingProvider>().requestReload(entry.input);
+    widget.onReload?.call();
   }
 
   @override
@@ -81,6 +92,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: _HistoryCard(
               entry: entry,
               onDelete: () => _deleteEntry(entry),
+              onReload: () => _reloadEntry(entry),
             ),
           );
         },
@@ -135,8 +147,13 @@ class _EmptyState extends StatelessWidget {
 class _HistoryCard extends StatelessWidget {
   final HistoryEntry entry;
   final VoidCallback onDelete;
+  final VoidCallback onReload;
 
-  const _HistoryCard({required this.entry, required this.onDelete});
+  const _HistoryCard({
+    required this.entry,
+    required this.onDelete,
+    required this.onReload,
+  });
 
   String _formatDate(DateTime dt) {
     const months = [
@@ -152,8 +169,6 @@ class _HistoryCard extends StatelessWidget {
     final input = entry.input;
     final output = entry.output;
 
-    // Matches the original mockup's card title style: blend + weave +
-    // count, e.g. "PC 80/20 Plain 40x40".
     final title =
         '${input.warpBlend} ${input.weave} ${input.warpCount.toStringAsFixed(0)}x${input.weftCount.toStringAsFixed(0)}';
 
@@ -161,11 +176,7 @@ class _HistoryCard extends StatelessWidget {
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          // TODO (Rabia, Step 17): reload `entry.input` back into the
-          // Costing form when tapped. Not implemented yet — tapping a
-          // card currently does nothing except show the delete icon.
-        },
+        onTap: onReload,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -210,14 +221,19 @@ class _HistoryCard extends StatelessWidget {
               Row(
                 children: [
                   _Badge(
-                    text:
-                    '${output.greyFabricRate.toStringAsFixed(2)} PKR/mtr',
+                    text: '${output.greyFabricRate.toStringAsFixed(2)} PKR/mtr',
                     colorScheme: colorScheme,
                   ),
                   const SizedBox(width: 8),
                   _Badge(
                     text: '${input.width.toStringAsFixed(0)}" width',
                     colorScheme: colorScheme,
+                  ),
+                  const SizedBox(width: 8),
+                  _Badge(
+                    text: 'Tap to reload',
+                    colorScheme: colorScheme,
+                    subtle: true,
                   ),
                 ],
               ),
@@ -232,15 +248,22 @@ class _HistoryCard extends StatelessWidget {
 class _Badge extends StatelessWidget {
   final String text;
   final ColorScheme colorScheme;
+  final bool subtle;
 
-  const _Badge({required this.text, required this.colorScheme});
+  const _Badge({
+    required this.text,
+    required this.colorScheme,
+    this.subtle = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: colorScheme.primaryContainer,
+        color: subtle
+            ? colorScheme.surfaceContainerLow
+            : colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -248,7 +271,9 @@ class _Badge extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          color: colorScheme.onPrimaryContainer,
+          color: subtle
+              ? colorScheme.onSurfaceVariant
+              : colorScheme.onPrimaryContainer,
         ),
       ),
     );
