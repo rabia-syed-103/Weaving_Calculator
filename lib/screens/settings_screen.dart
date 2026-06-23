@@ -2,30 +2,97 @@
 /// -----------------------------------------------------------------------
 /// Full Settings screen — reachable from the bottom nav AND from the
 /// sidebar drawer. Embeds the existing theme picker (Light/Dark + 5
-/// accent swatches, built by Rabia in widgets/theme_picker_section.dart)
-/// plus placeholder rows for the remaining settings from the original
-/// project mockup: voice language, clear history, export history.
-///
-/// NOTE ON SCOPE: voice language / clear history / export history are
-/// placeholders (show a "coming soon" snackbar on tap) because their
-/// real functionality depends on later phases:
-///   - Voice language  -> Phase 6 (speech_to_text integration)
-///   - Clear history   -> Phase 5 (Hive storage)
-///   - Export history  -> Phase 5 (Hive storage)
-/// Wiring them for real is the responsibility of whoever builds those
-/// phases — this screen just gives them a fixed place to live.
+/// accent swatches) plus wired-up rows for:
+///   - Clear history  → confirmation dialog → HistoryRepository.clearAll()
+///   - Share current  → ShareService.shareCostingSheet() with latest
+///                      calculation (Excel + PDF), disabled if nothing
+///                      has been calculated yet
+///   - Voice language → still a placeholder (Phase 6)
 library;
+
 import 'main_nav_shell.dart';
-
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../widgets/theme_picker_section.dart';
+import '../services/history_repository.dart';
+import '../services/share_service.dart';
+import '../models/history_entry_model.dart';
+import '../theme/costing_provider.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _isSharing = false;
+
+  Future<void> _clearHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Clear history?'),
+        content: const Text(
+          'This will permanently delete all saved calculations. '
+              'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(
+              'Clear',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    await HistoryRepository.instance.clearAll();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('History cleared')),
+    );
+  }
+
+  Future<void> _shareCurrentCalculation() async {
+    final costingProvider = context.read<CostingProvider>();
+    final input = costingProvider.lastInput;
+    final output = costingProvider.output;
+    if (input == null || output == null) return;
+
+    setState(() => _isSharing = true);
+    try {
+      final entry = HistoryEntry.now(input: input, output: output);
+      await ShareService.shareCostingSheet(entry);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not share: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
+    }
+  }
+
+  void _comingSoon(BuildContext context, String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$feature — coming in a later phase')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final hasCalculation = context.watch<CostingProvider>().output != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -39,8 +106,7 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Brand header — logo + app name, matches the original mockup's
-          // "ST" badge + SadeedTex name + version line.
+          // Brand header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 24),
@@ -89,12 +155,10 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Theme picker — reuses Rabia's existing widget so there's only
-          // ONE place the Light/Dark + accent logic lives, not two copies.
           const ThemePickerSection(),
           const SizedBox(height: 20),
 
-          _SectionLabel('Voice & data'),
+          const _SectionLabel('Voice & data'),
           const SizedBox(height: 8),
           Card(
             margin: EdgeInsets.zero,
@@ -111,27 +175,28 @@ class SettingsScreen extends StatelessWidget {
                   icon: Icons.delete_outline,
                   label: 'Clear history',
                   subtitle: 'Delete all saved calculations',
-                  iconColor: Theme.of(context).colorScheme.error,
-                  onTap: () => _comingSoon(context, 'Clear history'),
+                  iconColor: colorScheme.error,
+                  onTap: _clearHistory,
                 ),
                 const Divider(height: 1),
                 _SettingsRow(
-                  icon: Icons.download_outlined,
-                  label: 'Export history',
-                  subtitle: 'Save as JSON file',
-                  onTap: () => _comingSoon(context, 'Export history'),
+                  icon: _isSharing ? Icons.hourglass_top : Icons.share_outlined,
+                  label: 'Share current calculation',
+                  subtitle: hasCalculation
+                      ? 'Share as Excel + PDF'
+                      : 'Fill in the Costing form first',
+                  iconColor: hasCalculation
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                  onTap: hasCalculation && !_isSharing
+                      ? _shareCurrentCalculation
+                      : () {},
                 ),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  void _comingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature — coming in a later phase')),
     );
   }
 }

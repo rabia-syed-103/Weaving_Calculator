@@ -35,6 +35,7 @@ dependencies:
   provider: ^6.1.2
   excel: ^4.0.6
   share_plus: ^10.1.2
+  pdf: ^3.11.1
   path_provider: ^2.1.4
 
   # The following adds the Cupertino Icons font to your application.
