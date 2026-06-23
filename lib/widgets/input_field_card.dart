@@ -4,6 +4,18 @@
 /// input is handled by the single FAB on InputScreen (see
 /// VoiceInputController, Phase 6). This widget is purely the visual
 /// field + validation.
+///
+/// UPDATED — added optional [focusNode]. Needed for Input Inflow /
+/// Target Price: those two fields should re-run their reverse solve as
+/// soon as the user TAPS into the field (gains focus), not only when
+/// the typed text changes — otherwise switching focus between the two
+/// without editing either one leaves whichever field you tap back into
+/// showing a number that's now stale relative to the other field's more
+/// recent edit. InputScreen attaches a focus listener to detect that
+/// "gained focus" moment; this widget just needs to accept and wire up
+/// the FocusNode if one is passed in. When [focusNode] is null (every
+/// other field), TextFormField creates its own internally, exactly as
+/// before — behavior for all other fields is unchanged.
 library;
 
 import 'package:flutter/material.dart';
@@ -24,6 +36,11 @@ class InputFieldCard extends StatelessWidget {
   /// rather than direct user entry.
   final bool readOnly;
 
+  /// Optional — pass a FocusNode when the screen needs to know exactly
+  /// when this field gains focus (e.g. to re-trigger a calculation on
+  /// tap, not just on text change). Leave null for ordinary fields.
+  final FocusNode? focusNode;
+
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
 
@@ -34,6 +51,7 @@ class InputFieldCard extends StatelessWidget {
     this.type = FieldType.number,
     this.fullWidth = false,
     this.readOnly = false,
+    this.focusNode,
     this.validator,
     this.onChanged,
   });
@@ -64,6 +82,7 @@ class InputFieldCard extends StatelessWidget {
           const SizedBox(height: 2),
           TextFormField(
             controller: controller,
+            focusNode: focusNode,
             readOnly: readOnly,
             keyboardType: type == FieldType.number
                 ? const TextInputType.numberWithOptions(decimal: true)

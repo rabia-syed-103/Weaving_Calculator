@@ -47,7 +47,7 @@ class CostingProvider extends ChangeNotifier {
   }
 
   /// Called by InputScreen immediately after it reads pendingReload and
-  /// fills its controllers — clears the pending state so it doesn't
+  /// fills its controllers — clears the  pending state so it doesn't
   /// re-trigger on the next rebuild.
   void consumeReload() {
     if (_pendingReload == null) return;

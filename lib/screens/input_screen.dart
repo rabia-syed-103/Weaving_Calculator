@@ -57,6 +57,28 @@
 /// guard or explicit recalculate call is needed, since the LAST field
 /// set in the loop will be the one whose listener fires last and runs
 /// the calculation with every other field already in place.
+///
+/// FOCUS-TRIGGERED REVERSE SOLVE (Input Inflow / Target Price):
+/// Beyond the text-change listener, both fields also carry a FocusNode
+/// that re-runs their reverse solve the instant the field gains focus
+/// (tap-in), using whatever number is already there. This fixes a
+/// specific staleness bug: solving from Target Price overwrites Input
+/// Per Pick, which means Input Inflow's last-displayed number no longer
+/// reverse-solves to the CURRENT Input Per Pick — tapping back into
+/// Input Inflow without retyping anything used to leave that stale
+/// number on screen. See the _inputInflowFocus / _targetPriceFocus
+/// field comments below for the full explanation.
+///
+/// SIZING COST / KG — editable + independent fast lookup:
+/// This field is no longer read-only. Warp Count and Ply (plus the Warp
+/// Blend dropdown) each trigger _maybeUpdateSizingCost(), a lookup that
+/// runs independently of _recalculate() and therefore doesn't wait for
+/// all 25+ other fields to be filled in first. Auto-lookup always wins
+/// over manual entry the moment those three inputs produce a match;
+/// a manually typed value only survives when the repository has no
+/// match for the current Warp Count/Ply/Blend combination — see
+/// _maybeUpdateSizingCost() and the rate-fallback logic inside
+/// _recalculate() for the exact rules.
 library;
 
 import 'package:flutter/material.dart';
@@ -99,7 +121,7 @@ class _InputScreenState extends State<InputScreen> {
     'weftWastagePct': TextEditingController(),
     'warpYarnRate': TextEditingController(),
     'weftYarnRate': TextEditingController(),
-    'sizingCostPerKg': TextEditingController(), // populated via lookup, read-only
+    'sizingCostPerKg': TextEditingController(), // auto-filled via lookup, but editable — see _maybeUpdateSizingCost()
     'commissionPct': TextEditingController(),
     'inputPerPick': TextEditingController(),
     'packingCost': TextEditingController(text: '0'),
@@ -127,12 +149,43 @@ class _InputScreenState extends State<InputScreen> {
   // avoids a redundant double-recalculate).
   bool _isSolving = false;
 
+  // Same idea as _isSolving, but for sizingCostPerKg: when
+  // _recalculate() itself writes the looked-up rate into that field
+  // (auto-lookup winning over manual entry), that write fires the
+  // field's own listener too. Without this guard, that would trigger a
+  // second, redundant _recalculate() call right after the first one —
+  // harmless in terms of correctness (it would just recompute the same
+  // result), but unnecessary work on every keystroke in warpCount/ply.
+  bool _isWritingSizingCost = false;
+
+  // FOCUS-TRIGGERED REVERSE SOLVE — Input Inflow / Target Price.
+  //
+  // Problem this solves: tap Loom In Flow, type a number -> solves
+  // Input Per Pick from THAT field. Tap Target Price, type a number ->
+  // solves Input Per Pick from Target Price instead, overwriting the
+  // previous solve. Tap back into Loom In Flow WITHOUT changing its
+  // text -> nothing happens, because the text-change listener only
+  // fires on an actual edit. But the number sitting in Loom In Flow is
+  // now stale: it no longer matches the Input Per Pick that Target
+  // Price's solve just produced. The field looks unchanged, but its
+  // "meaning" (whether it still correctly reverse-solves to the CURRENT
+  // Input Per Pick) has silently gone wrong — annoying exactly because
+  // nothing on screen signals it.
+  //
+  // Fix: a FocusNode per field, with a listener that fires the SAME
+  // reverse solve the moment the field gains focus (tap-in), using
+  // whatever number is already sitting in the field. This refreshes
+  // the calculation to be consistent with the current Input Per Pick
+  // even when the user hasn't typed anything yet — tapping alone is
+  // enough to ask "does this field's solve still hold?" and correct it
+  // if not.
+  final _inputInflowFocus = FocusNode();
+  final _targetPriceFocus = FocusNode();
+
   @override
   void initState() {
     super.initState();
     for (final entry in _controllers.entries) {
-      if (entry.key == 'sizingCostPerKg') continue;
-
       if (entry.key == 'inputInflow') {
         entry.value.addListener(() => _recalculate(solveFrom: SolverMode.inFlow));
       } else if (entry.key == 'targetPrice') {
@@ -140,7 +193,83 @@ class _InputScreenState extends State<InputScreen> {
       } else {
         entry.value.addListener(() => _recalculate());
       }
+
+      // SIZING COST / KG — fast, independent lookup.
+      //
+      // Problem this solves: previously, Sizing Cost / Kg only ever got
+      // filled in deep inside _recalculate(), which first checks ALL 25
+      // required fields and bails out early if even one is missing. So
+      // the user had to fill in the entire form before Sizing Cost / Kg
+      // ever appeared — even though the lookup itself only needs 3
+      // values (Warp Count, Ply, Warp Blend).
+      //
+      // Fix: warpCount and ply each also get this lightweight listener,
+      // which runs SizingRatesRepository.lookup() on its own the moment
+      // all three of its inputs are present — independent of whether
+      // the other 22 fields are filled in yet. Warp Blend's dropdown
+      // calls this directly from onChanged (see _warpBlendAndPlyRow())
+      // since it isn't a text controller.
+      //
+      // Per direct instruction, auto-lookup ALWAYS overwrites whatever
+      // is currently in the field — including a value the user typed
+      // in manually. Manual entry only "sticks" when the lookup itself
+      // doesn't have a match (incomplete fields, or no matching Sizing
+      // Rate row) — at that point _maybeUpdateSizingCost() simply does
+      // nothing, leaving whatever's already in the field untouched.
+      if (entry.key == 'warpCount' || entry.key == 'ply') {
+        entry.value.addListener(_maybeUpdateSizingCost);
+      }
     }
+
+    // Re-run the relevant reverse solve as soon as the user taps into
+    // either field — see the comment above this block for why a
+    // text-change listener alone isn't enough.
+    _inputInflowFocus.addListener(() {
+      if (_inputInflowFocus.hasFocus) {
+        _recalculate(solveFrom: SolverMode.inFlow, fromFocus: true);
+      }
+    });
+    _targetPriceFocus.addListener(() {
+      if (_targetPriceFocus.hasFocus) {
+        _recalculate(solveFrom: SolverMode.targetPrice, fromFocus: true);
+      }
+    });
+  }
+
+  /// Looks up Sizing Cost / Kg from just Warp Count + Ply + Warp Blend,
+  /// independent of every other field on the form — see the comment in
+  /// initState() above for why this exists separately from
+  /// _recalculate(). Called from warpCount/ply text listeners and from
+  /// the Warp Blend dropdown's onChanged.
+  ///
+  /// If all three inputs are present and a matching Sizing Rate exists,
+  /// the field is overwritten with the looked-up rate (auto-lookup
+  /// always wins over manual entry, per direct instruction). If any
+  /// input is missing or there's no match, this does nothing — it does
+  /// NOT clear the field, so a manually-typed value stays put until a
+  /// real match overwrites it.
+  void _maybeUpdateSizingCost() {
+    final warpCount = double.tryParse(_controllers['warpCount']!.text.trim());
+    final ply = double.tryParse(_controllers['ply']!.text.trim());
+    final warpBlend = _warpBlend;
+
+    if (warpCount == null || ply == null || warpBlend == null || warpBlend.isEmpty) {
+      return;
+    }
+
+    final rate = SizingRatesRepository.instance.lookup(
+      count: warpCount,
+      ply: ply,
+      blend: warpBlend,
+    );
+
+    if (rate == null) return; // no match — leave the field as-is
+
+    _isWritingSizingCost = true;
+    setState(() {
+      _controllers['sizingCostPerKg']!.text = rate.perKg.toStringAsFixed(2);
+    });
+    _isWritingSizingCost = false;
   }
 
   @override
@@ -148,6 +277,8 @@ class _InputScreenState extends State<InputScreen> {
     for (final entry in _controllers.entries) {
       entry.value.dispose();
     }
+    _inputInflowFocus.dispose();
+    _targetPriceFocus.dispose();
     super.dispose();
   }
 
@@ -225,8 +356,22 @@ class _InputScreenState extends State<InputScreen> {
   /// Input Inflow or Target Price — in that case, Input Per Pick is
   /// solved backwards FIRST, then the normal forward pass runs using
   /// the solved value.
-  void _recalculate({SolverMode? solveFrom}) {
+  ///
+  /// [fromFocus] is true when this call came from a FocusNode listener
+  /// (tapping into the field) rather than a text-change listener. In
+  /// that case, if the field is empty/zero — i.e. the user hasn't
+  /// actually entered a target value yet — skip the solve entirely
+  /// instead of showing a "Target Price is zero!" style error just for
+  /// tapping into an untouched field.
+  void _recalculate({SolverMode? solveFrom, bool fromFocus = false}) {
     if (_isSolving) return; // re-entrancy guard, see field doc above
+    if (_isWritingSizingCost) return; // see field doc above
+
+    if (fromFocus && solveFrom != null) {
+      final key = solveFrom == SolverMode.inFlow ? 'inputInflow' : 'targetPrice';
+      final current = double.tryParse(_controllers[key]!.text.trim());
+      if (current == null || current == 0) return;
+    }
 
     setState(() {
       double? num(String key) => double.tryParse(_controllers[key]!.text.trim());
@@ -263,15 +408,40 @@ class _InputScreenState extends State<InputScreen> {
         blend: warpBlend,
       );
 
-      if (rate == null) {
-        _greyFabricRate = 0;
-        _loomInFlow = 0;
-        _solverError = null;
-        _controllers['sizingCostPerKg']!.text = '—';
-        Future.microtask(() => context.read<CostingProvider>().clear());
-        return;
+      // SIZING COST / KG — auto-lookup vs manual entry.
+      //
+      // If the repository has a match (rate != null), it ALWAYS wins —
+      // per direct instruction, auto-lookup overwrites any manually
+      // typed value the moment Warp Count/Ply/Blend changes. The field
+      // itself is updated to show the looked-up number, replacing
+      // whatever was there before.
+      //
+      // If there's no match (rate == null) — which the repository's
+      // closest-match logic makes rare, but not impossible — fall back
+      // to whatever is currently sitting in the Sizing Cost / Kg field,
+      // since that may be a value the user typed in deliberately. Only
+      // bail out to the zeroed/cleared state if that field is ALSO
+      // empty or invalid, i.e. there is truly no usable rate from
+      // either source.
+      double effectiveSizingCost;
+      if (rate != null) {
+        effectiveSizingCost = rate.perKg;
+        _isWritingSizingCost = true;
+        _controllers['sizingCostPerKg']!.text = rate.perKg.toStringAsFixed(2);
+        _isWritingSizingCost = false;
+      } else {
+        final manual = double.tryParse(_controllers['sizingCostPerKg']!.text.trim());
+        if (manual == null) {
+          _greyFabricRate = 0;
+          _loomInFlow = 0;
+          _solverError = null;
+          Future.microtask(() => context.read<CostingProvider>().clear());
+          return;
+        }
+        effectiveSizingCost = manual;
+        // Leave the field exactly as the user typed it — don't reformat
+        // or touch it here.
       }
-      _controllers['sizingCostPerKg']!.text = rate.perKg.toStringAsFixed(2);
 
       // Build the InputModel with whatever Input Per Pick currently is —
       // needed both as the final forward-pass input AND, if solveFrom is
@@ -295,7 +465,7 @@ class _InputScreenState extends State<InputScreen> {
         weftWastagePct: values['weftWastagePct']!,
         warpYarnRate: values['warpYarnRate']!,
         weftYarnRate: values['weftYarnRate']!,
-        sizingCostPerKg: rate.perKg,
+        sizingCostPerKg: effectiveSizingCost,
         commissionPct: values['commissionPct']!,
         offGradePct: values['offGradePct']!,
         offGradeRecovery: values['offGradeRecovery']!,
@@ -319,12 +489,12 @@ class _InputScreenState extends State<InputScreen> {
         final result = solveFrom == SolverMode.inFlow
             ? ReverseSolver.solveForInFlow(
           input: probeInput,
-          sizingCostPerKg: rate.perKg,
+          sizingCostPerKg: effectiveSizingCost,
           inputInflow: values['inputInflow']!,
         )
             : ReverseSolver.solveForTargetPrice(
           input: probeInput,
-          sizingCostPerKg: rate.perKg,
+          sizingCostPerKg: effectiveSizingCost,
           targetPrice: values['targetPrice']!,
         );
 
@@ -347,7 +517,7 @@ class _InputScreenState extends State<InputScreen> {
       }
 
       final input = buildInput(inputPerPick);
-      final output = CalculationEngine.calculate(input: input, sizingCostPerKg: rate.perKg);
+      final output = CalculationEngine.calculate(input: input, sizingCostPerKg: effectiveSizingCost);
 
       _greyFabricRate = output.greyFabricRate;
       _loomInFlow = output.loomInFlow;
@@ -438,8 +608,8 @@ class _InputScreenState extends State<InputScreen> {
                     // comment for how the two stay in sync without
                     // looping.
                     _section('Inflow & Target', [
-                      _field('inputInflow', 'Input Inflow'),
-                      _field('targetPrice', 'Target Price'),
+                      _field('inputInflow', 'Input Inflow', focusNode: _inputInflowFocus),
+                      _field('targetPrice', 'Target Price', focusNode: _targetPriceFocus),
                     ]),
                     _section('Fabric Specification', [
                       _warpBlendAndPlyRow(),
@@ -461,7 +631,7 @@ class _InputScreenState extends State<InputScreen> {
                     _section('Rates & Costing', [
                       _field('warpYarnRate', 'Warp Yarn Rate'),
                       _field('weftYarnRate', 'Weft Yarn Rate'),
-                      _field('sizingCostPerKg', 'Sizing Cost / Kg', readOnly: true),
+                      _field('sizingCostPerKg', 'Sizing Cost / Kg'),
                       _field('commissionPct', 'Commission %'),
                       _field('inputPerPick', 'Input Per Pick'),
                       _field('packingCost', 'Packing Cost'),
@@ -567,6 +737,7 @@ class _InputScreenState extends State<InputScreen> {
                         .toList(),
                     onChanged: (value) {
                       _warpBlend = value;
+                      _maybeUpdateSizingCost();
                       _recalculate();
                     },
                   ),
@@ -593,6 +764,7 @@ class _InputScreenState extends State<InputScreen> {
         FieldType type = FieldType.number,
         bool fullWidth = false,
         bool readOnly = false,
+        FocusNode? focusNode,
       }) {
     final screenWidth = MediaQuery.of(context).size.width;
     final usableWidth = screenWidth - 32;
@@ -606,6 +778,7 @@ class _InputScreenState extends State<InputScreen> {
         type: type,
         fullWidth: fullWidth,
         readOnly: readOnly,
+        focusNode: focusNode,
       ),
     );
   }
