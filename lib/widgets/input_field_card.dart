@@ -84,9 +84,17 @@ class InputFieldCard extends StatelessWidget {
             controller: controller,
             focusNode: focusNode,
             readOnly: readOnly,
+
+            textInputAction: TextInputAction.next,
+
+            onFieldSubmitted: (_) {
+              FocusScope.of(context).nextFocus();
+            },
+
             keyboardType: type == FieldType.number
                 ? const TextInputType.numberWithOptions(decimal: true)
                 : TextInputType.text,
+
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
@@ -94,12 +102,16 @@ class InputFieldCard extends StatelessWidget {
                   ? colorScheme.onSurfaceVariant
                   : colorScheme.onSurface,
             ),
+
             decoration: const InputDecoration(
               border: InputBorder.none,
               isDense: true,
               contentPadding: EdgeInsets.zero,
             ),
-            validator: validator ?? (type == FieldType.number ? _defaultNumberValidator : null),
+
+            validator: validator ??
+                (type == FieldType.number ? _defaultNumberValidator : null),
+
             onChanged: onChanged,
           ),
         ],
