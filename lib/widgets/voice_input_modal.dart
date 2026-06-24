@@ -26,46 +26,83 @@
 /// — the user must set it manually via the dropdown before or after
 /// voice input. A hint in the UI tells them this.
 ///
-/// HOLD-TO-TALK (changed from auto-listen):
-/// Previously the mic auto-started listening the moment a new field
-/// appeared, and ran for up to 15 seconds or until a 3-second pause.
-/// That gave the user little control over exactly when the mic was
-/// live, and made it hard to tell when it had stopped. Per direct
-/// instruction, this now works like WhatsApp's voice-note button:
-/// press and HOLD the mic to talk, release to stop. No auto-listen, no
-/// timeout — listening is only ever active while the button is held
-/// down. See _MicButton / _onMicDown / _onMicUp below.
+/// HOLD-TO-TALK — uses Listener instead of GestureDetector:
+/// GestureDetector's onTapDown/onTapUp/onTapCancel are TAP gesture
+/// callbacks that go through Flutter's gesture arena — a layer that
+/// waits briefly to disambiguate a tap from a drag/long-press before
+/// firing. Wrong for "press and hold", especially when the widget tree
+/// rebuilds mid-gesture (which happens here every time a field is
+/// skipped/confirmed). Listener receives raw PointerDown/Up/Cancel
+/// events directly — no arena, no disambiguation delay.
 ///
-/// SPOKEN NUMBER-WORD PARSING:
-/// The on-device speech engine sometimes transcribes numbers as words
-/// rather than digits (e.g. "twenty five hundred" instead of "2500"),
-/// and digit-by-digit cleanup alone turns that into garbage — stripping
-/// non-numeric characters from "twenty five hundred" doesn't recover
-/// 2500. _parseSpokenNumber() below walks the transcript word-by-word
-/// (English or Urdu, matching whichever language is active) and
-/// accumulates a value using standard long-form number rules — same
-/// approach as how "two thousand three hundred and fifty" or its Urdu
-/// equivalent ("دو ہزار تین سو پچاس") gets read aloud. If the
-/// transcript is already digits (e.g. the engine output "2500"
-/// directly), parsing short-circuits to a plain double.tryParse so
-/// nothing is lost or changed for the common case.
+/// WARM-UP DELAY FOR SHORT WORDS:
+/// On most Android/iOS devices the recognizer takes roughly 200-400ms
+/// to actually start capturing audio after listen() is called, so very
+/// short utterances spoken right at that boundary can get their leading
+/// edge clipped. A 250ms delay runs between starting the listening
+/// session and signalling "go ahead and speak" so the user doesn't
+/// start talking into a half-started engine.
 ///
-/// HOW IT WORKS:
-/// 1. User taps the FAB → showModalBottomSheet() opens this widget.
-/// 2. The modal shows the field name and waits — nothing is recorded
-///    until the user presses and holds the mic button.
-/// 3. While held, live transcript updates in real time.
-/// 4. On release, the transcript is finalized. User taps CONFIRM to
-///    write it into the matching controller and move to the next
-///    field, or holds the mic again to re-record before confirming.
-/// 5. SKIP moves to the next field without changing the current value.
-/// 6. After the last field, the modal shows a "Done" button that
-///    closes it.
+/// SINGLE-WORD RECOGNITION — listenMode.dictation:
+/// This is the second, separate fix for short words being missed (the
+/// warm-up delay alone does not fully solve it). speech_to_text exposes
+/// a `listenMode` that controls how the underlying platform recognizer
+/// is configured:
+///   - ListenMode.confirmation (the package default if you don't set
+///     it) is tuned for short yes/no-style command phrases and is more
+///     aggressive about deciding "nothing useful was said" quickly.
+///   - ListenMode.dictation is tuned for free-form speech and is more
+///     forgiving of a single isolated word with silence on either side.
+/// Switched to ListenMode.dictation below — this is the actual fix for
+/// "speaking one short word like 'two' alone isn't captured."
+///
+/// ERROR HANDLING — recoverable vs fatal, and the permanent-lock bug:
+/// Every error speech_to_text reports comes through one onError
+/// callback, but they are NOT all the same severity:
+///   - error_speech_timeout / error_no_match / error_busy are routine,
+///     expected, recoverable conditions — Android's native
+///     SpeechRecognizer enforces its own short "didn't hear anything
+///     yet" timeout internally and WILL fire this if the engine starts
+///     listening but doesn't detect audio within its own internal
+///     window. Critically, pauseFor/listenFor (the durations this
+///     widget passes in) do NOT override that internal Android timeout
+///     — see the package docs: pauseFor is documented as being ignored
+///     on Android, which enforces its own (much shorter) pause/timeout
+///     behavior regardless of what's requested. So even with
+///     listenFor/pauseFor set to 2 minutes, Android can still decide on
+///     its own that "too much silence has passed" and emit
+///     error_speech_timeout while the user is still holding the button.
+///   - error_audio_error / error_client / permission-related errors are
+///     genuinely fatal — something is actually broken and retrying
+///     won't help.
+/// The previous version treated ALL errors as fatal: onError always set
+/// _initError, and the UI permanently locks into a "Microphone Not
+/// available" dead-end screen the instant _initError is non-null, with
+/// no path back except closing the whole modal. That's why one routine
+/// timeout on field 3 could brick the rest of the session even though
+/// the mic hardware and permissions were completely fine.
+/// Fixed by classifying errors: recoverable ones just reset the
+/// listening state (with a small inline "didn't catch that" hint) so
+/// the user can immediately press and try again; only genuinely fatal
+/// errors show the dead-end screen.
+///
+/// BUSY GUARD — mic getting permanently stuck after rapid skips/errors:
+/// Any stop()/listen() call sets _busy true and is awaited fully before
+/// clearing it, and the mic button (and Skip/Confirm) ignore taps while
+/// _busy is true. This serializes every engine interaction instead of
+/// letting overlapping calls race and desync speech_to_text's internal
+/// state. The error path now ALSO guarantees _busy/_warmingUp/
+/// _isListening are reset in a finally-equivalent block, since a
+/// mid-flight error is exactly the case most likely to leave one of
+/// those flags stuck true (which is what made the mic stop responding
+/// to presses at all, not just stop showing transcripts).
 library;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:speech_to_text/speech_recognition_error.dart';
 
 /// One field in the voice-fill sequence.
 class _VoiceField {
@@ -125,6 +162,32 @@ extension on VoiceLang {
 }
 
 // =========================================================================
+// ERROR CLASSIFICATION
+// =========================================================================
+//
+// speech_to_text reports every engine-level problem through the same
+// onError callback, tagged with a string errorMsg. Not all of them mean
+// the same thing, and treating them identically is what caused the
+// "one timeout bricks the whole modal" bug. This list is the set of
+// codes that are routine/expected and should just let the user try
+// again, not show a dead-end "Microphone Not available" screen.
+//
+// error_speech_timeout : Android's native SpeechRecognizer didn't
+//                         detect audio within ITS OWN internal timeout
+//                         window (independent of listenFor/pauseFor,
+//                         which Android ignores). Means "didn't hear
+//                         you in time", not "mic is broken".
+// error_no_match        : Engine heard audio but couldn't match it to
+//                         anything. Means "didn't understand that".
+// error_busy             : Engine was still tearing down a previous
+//                         session. Means "try again in a moment".
+const Set<String> _kRecoverableErrors = {
+  'error_speech_timeout',
+  'error_no_match',
+  'error_busy',
+};
+
+// =========================================================================
 // SPOKEN NUMBER-WORD PARSING
 // =========================================================================
 //
@@ -132,22 +195,6 @@ extension on VoiceLang {
 // Urdu, so a transcript like "twenty five hundred" or "تین سو پچاس"
 // resolves to the number a person actually meant (2500 / 350) instead
 // of getting mangled by naive digit-stripping.
-//
-// ALGORITHM (same idea behind how both languages are spoken aloud):
-// Walk the words left to right, keeping a running `current` (the
-// number being built for the current "group") and a running `total`
-// (groups already closed out by a big multiplier like hundred/thousand).
-//   - A units/teens/tens word ADDS into `current`
-//     ("twenty" -> current=20, then "five" -> current=25)
-//   - "hundred" MULTIPLIES current by 100 and keeps accumulating
-//     ("twenty five" -> current=25, then "hundred" -> current=2500)
-//   - "thousand"/"hundred thousand" etc. closes out current into total
-//     at that scale, then resets current to 0 for whatever comes next
-//   - A decimal word ("point"/"دشمہ") switches into a digit-by-digit
-//     fractional reading: "sixty point five" -> 60 then ".5"
-// This mirrors exactly how "twenty five hundred" is meant (2500), and
-// "two thousand three hundred" is meant (2300), without hardcoding
-// every possible phrase.
 class _SpokenNumberParser {
   static const Map<String, int> _enUnits = {
     'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
@@ -165,13 +212,6 @@ class _SpokenNumberParser {
     'crore': 10000000,
   };
 
-  // Urdu number words. Coverage focuses on the common spoken forms for
-  // costing-sheet-sized numbers (units, tens, hundred/thousand/lakh)
-  // rather than exhaustively listing every irregular teen (Urdu's
-  // 11-99 range is mostly irregular compound words, e.g. اکیس=21,
-  // بائیس=22 — these are listed individually below rather than
-  // algorithmically derived, since Urdu doesn't compose them the way
-  // English builds "twenty" + "one").
   static const Map<String, int> _urUnits = {
     'صفر': 0, 'ایک': 1, 'دو': 2, 'تین': 3, 'چار': 4, 'پانچ': 5,
     'چھ': 6, 'سات': 7, 'آٹھ': 8, 'نو': 9, 'دس': 10,
@@ -210,10 +250,6 @@ class _SpokenNumberParser {
     return lang == VoiceLang.urdu ? _parseUrdu(raw) : _parseEnglish(raw);
   }
 
-  /// Strips common spoken punctuation/units around an ALREADY-numeric
-  /// transcript (e.g. "60.5 percent" -> "60.5"). Does not attempt to
-  /// convert words — that's handled separately by _parseEnglish /
-  /// _parseUrdu when this returns something unparsable.
   static String _cleanDigitsOnly(String raw) {
     var s = raw
         .toLowerCase()
@@ -239,7 +275,6 @@ class _SpokenNumberParser {
         .toList();
     if (words.isEmpty) return null;
 
-    // Split off a decimal part if "point"/"." appears.
     final pointIndex = words.indexWhere((w) => w == 'point' || w == '.');
     List<String> wholeWords = words;
     List<String> fractionWords = [];
@@ -253,12 +288,10 @@ class _SpokenNumberParser {
 
     if (fractionWords.isEmpty) return whole.toDouble();
 
-    // Fractional part is read digit-by-digit ("point five" -> ".5",
-    // "point one two" -> ".12") rather than as its own grouped number.
     final digits = StringBuffer();
     for (final w in fractionWords) {
       final d = _enUnits[w];
-      if (d == null || d > 9) return whole.toDouble(); // bail gracefully
+      if (d == null || d > 9) return whole.toDouble();
       digits.write(d);
     }
     if (digits.isEmpty) return whole.toDouble();
@@ -272,7 +305,7 @@ class _SpokenNumberParser {
     bool sawAnything = false;
 
     for (final w in words) {
-      if (w == 'and') continue; // "two hundred and fifty" — skip filler
+      if (w == 'and') continue;
       if (_enUnits.containsKey(w)) {
         current += _enUnits[w]!;
         sawAnything = true;
@@ -289,8 +322,6 @@ class _SpokenNumberParser {
         current = 0;
         sawAnything = true;
       } else {
-        // Unknown word in the middle of a number phrase — treat as a
-        // hard stop rather than guessing.
         return sawAnything ? total + current : null;
       }
     }
@@ -298,7 +329,6 @@ class _SpokenNumberParser {
   }
 
   static double? _parseUrdu(String raw) {
-    // Urdu script — split on whitespace, keep only word characters.
     final words = raw
         .split(RegExp(r'\s+'))
         .map((w) => w.trim())
@@ -336,7 +366,7 @@ class _SpokenNumberParser {
     bool sawAnything = false;
 
     for (final w in words) {
-      if (w == 'اور') continue; // "اور" = "and" — filler
+      if (w == 'اور') continue;
       if (_urUnits.containsKey(w)) {
         current += _urUnits[w]!;
         sawAnything = true;
@@ -368,14 +398,37 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   final SpeechToText _speech = SpeechToText();
 
   bool _speechAvailable = false;
+
+  // Fatal init/hardware/permission problem — shows the permanent
+  // dead-end screen. Distinct from _retryHint below, which is for
+  // routine recoverable errors that should NOT lock the modal.
   String? _initError;
 
-  // Driven by speech_to_text's onStatus callback, which reports the
-  // engine's ACTUAL state ("listening" / "notListening" / "done") —
-  // this is the only reliable source of truth for whether the mic is
-  // live right now (the listen() Future itself only confirms the
-  // request was accepted, not that listening is ongoing).
+  // Set briefly when a RECOVERABLE error (timeout / no-match / busy)
+  // happens mid-session. Shown as a small inline hint near the
+  // transcript box ("Didn't catch that — try again") instead of
+  // replacing the whole modal. Cleared automatically on the next
+  // press of the mic.
+  String? _retryHint;
+
+  // Driven by speech_to_text's onStatus callback — the only reliable
+  // source of truth for whether the mic is live right now.
   bool _isListening = false;
+
+  // True while the engine is "warming up" — the brief window between
+  // listen() being called and the warm-up delay finishing, during
+  // which the UI shows a distinct visual state so the user knows to
+  // wait a beat before speaking. See _onPointerDown.
+  bool _warmingUp = false;
+
+  // BUSY GUARD — true for the entire duration of any stop()/listen()
+  // call this widget makes, from the moment it's invoked until it (and
+  // any warm-up delay) fully completes. The mic button and Skip/Confirm
+  // ignore input while this is true, which prevents overlapping engine
+  // calls from racing each other. Also force-cleared whenever onError
+  // fires, since a mid-flight error is the case most likely to leave
+  // this stuck true otherwise (see class-level doc comment).
+  bool _busy = false;
 
   String _transcript = '';
 
@@ -409,14 +462,7 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     try {
       final available = await _speech.initialize(
         onStatus: _handleStatus,
-        onError: (error) {
-          if (mounted) {
-            setState(() {
-              _isListening = false;
-              _initError = error.errorMsg;
-            });
-          }
-        },
+        onError: _handleError,
       );
 
       if (mounted) setState(() => _speechAvailable = available);
@@ -443,14 +489,41 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     });
   }
 
-  /// Looks through the device's installed speech recognition locales
-  /// for an Urdu one. Falls back to English-only if none is found,
-  /// rather than letting the user pick Urdu and then silently getting
-  /// English recognition (or an error) on every listen() call. As
-  /// discussed, this stays device-dependent for now — no cloud
-  /// fallback — so on devices without an Urdu speech pack installed,
-  /// the Urdu option is disabled with an explanatory note rather than
-  /// pretending to support it.
+  /// Single entry point for every engine-level error, called both
+  /// during the initial speech.initialize() and during any listen()
+  /// session. The critical fix here vs. the previous version: this no
+  /// longer unconditionally sets _initError (which permanently locks
+  /// the modal into the dead-end screen). Routine/expected errors are
+  /// classified via _kRecoverableErrors and just reset listening state
+  /// with a small retry hint; only genuinely fatal errors set
+  /// _initError.
+  ///
+  /// Also unconditionally clears _busy/_isListening/_warmingUp — an
+  /// error happening mid-listen is exactly the scenario where those
+  /// flags are most likely to be left stuck true by a race between the
+  /// error path and whatever _onPointerDown/_onPointerUp/_advance call
+  /// happened to be in flight, which is what made the mic stop
+  /// responding to ANY press at all (not just stop producing text).
+  void _handleError(SpeechRecognitionError error) {
+    if (!mounted) return;
+
+    final isRecoverable = _kRecoverableErrors.contains(error.errorMsg);
+
+    setState(() {
+      _isListening = false;
+      _warmingUp = false;
+      _busy = false;
+
+      if (isRecoverable) {
+        _retryHint = error.errorMsg == 'error_no_match'
+            ? _t('Didn\'t catch that — try again', 'سمجھ نہیں آیا — دوبارہ کوشش کریں')
+            : _t('Didn\'t hear you in time — try again', 'وقت پر آواز نہیں آئی — دوبارہ کوشش کریں');
+      } else {
+        _initError = error.errorMsg;
+      }
+    });
+  }
+
   Future<void> _checkUrduAvailable() async {
     try {
       final locales = await _speech.locales();
@@ -472,44 +545,82 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   }
 
   void _setLang(VoiceLang lang) {
-    if (_lang == lang) return;
+    if (_lang == lang || _busy) return;
     setState(() {
       _lang = lang;
       _transcript = '';
     });
   }
 
-  /// HOLD-TO-TALK — press down.
-  /// Starts a fresh listening session for the current field. Any
-  /// previous transcript for this field is cleared, since holding the
-  /// mic again means "let me re-record this".
-  Future<void> _onMicDown() async {
-    if (!_speechAvailable || _done || _isListening) return;
+  /// HOLD-TO-TALK — press down. Called from a Listener's onPointerDown,
+  /// not a GestureDetector tap callback — see the class-level doc
+  /// comment "HOLD-TO-TALK" for why that distinction matters.
+  ///
+  /// Guarded by _busy so a press that lands while a previous stop() is
+  /// still finishing is ignored instead of racing it.
+  ///
+  /// listenMode is explicitly set to ListenMode.dictation — see the
+  /// class-level doc comment "SINGLE-WORD RECOGNITION" for why this
+  /// (not just the warm-up delay) is the actual fix for short isolated
+  /// words being missed.
+  ///
+  /// After listen() starts, a 250ms warm-up delay runs before
+  /// _warmingUp clears. The user can still speak during this window
+  /// (the engine IS recording), but the UI distinguishes "still
+  /// warming up" from "fully listening" so very short words spoken
+  /// right at press-down aren't the first thing said to a
+  /// half-started engine.
+  Future<void> _onPointerDown() async {
+    if (!_speechAvailable || _done || _busy || _isListening) return;
 
-    setState(() => _transcript = '');
+    setState(() {
+      _busy = true;
+      _warmingUp = true;
+      _transcript = '';
+      _retryHint = null;
+    });
 
-    // NOTE: don't set _isListening here — onStatus('listening') fires
-    // on its own once the engine actually starts, and is the single
-    // source of truth for this flag (see field doc comment above).
-    await _speech.listen(
-      onResult: _handleResult,
-      localeId: _lang.localeId,
-      // No listenFor/pauseFor timeout — listening is bounded entirely
-      // by how long the user holds the button (_onMicUp calls stop()),
-      // matching the press-and-hold voice-note pattern directly.
-      listenFor: const Duration(minutes: 2), // generous ceiling, not a real timeout
-      pauseFor: const Duration(minutes: 2),  // disable Android's pause-based auto-stop
-      cancelOnError: false,
-      partialResults: true,
-    );
+    try {
+      await _speech.listen(
+        onResult: _handleResult,
+        localeId: _lang.localeId,
+        listenMode: ListenMode.dictation,
+        // No real timeout — bounded entirely by how long the button is
+        // held (onPointerUp calls stop()). These are generous ceilings
+        // so Android/iOS don't impose their own short default — though
+        // note Android still enforces its OWN internal speech-timeout
+        // independently of these values; that's handled via
+        // _handleError + _kRecoverableErrors instead, since it can't be
+        // configured away.
+        listenFor: const Duration(minutes: 2),
+        pauseFor: const Duration(minutes: 2),
+        cancelOnError: false,
+        partialResults: true,
+      );
+      await Future.delayed(const Duration(milliseconds: 250));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _warmingUp = false;
+          _busy = false;
+        });
+      }
+    }
   }
 
-  /// HOLD-TO-TALK — release.
-  /// Stops listening; whatever transcript has accumulated stays on
-  /// screen for the user to Confirm or hold-to-retry.
-  Future<void> _onMicUp() async {
-    if (!_isListening) return;
-    await _speech.stop();
+  /// HOLD-TO-TALK — release. Stops listening and waits for that to
+  /// fully complete before clearing _busy, so a fast tap on Skip/
+  /// Confirm/mic right after release can't overlap with the stop()
+  /// still being processed by the engine.
+  Future<void> _onPointerUp() async {
+    if (!_isListening && !_warmingUp) return;
+
+    setState(() => _busy = true);
+    try {
+      await _speech.stop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   void _handleResult(SpeechRecognitionResult result) {
@@ -520,8 +631,9 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   /// Confirms the current transcript as the value for the current field,
   /// writes it into the controller, then advances to the next field.
   void _confirm() {
+    if (_busy) return;
     final raw = _transcript.trim();
-    if (raw.isEmpty) return; // nothing to confirm
+    if (raw.isEmpty) return;
 
     final field = _currentField;
     if (!field.isText) {
@@ -529,9 +641,7 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
       if (value != null) {
         widget.controllers[field.key]?.text = _formatForField(value);
       }
-      // If parse fails, don't write anything — let the user re-record.
     } else {
-      // Text field — write the raw transcript as-is.
       widget.controllers[field.key]?.text = raw;
     }
 
@@ -539,24 +649,41 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   }
 
   /// Skips the current field (leaves its controller unchanged).
-  void _skip() => _advance();
+  void _skip() {
+    if (_busy) return;
+    _advance();
+  }
 
-  void _advance() {
-    _speech.stop();
-    if (_fieldIndex >= _kVoiceFields.length - 1) {
-      setState(() {
-        _done = true;
-      });
-    } else {
-      setState(() {
-        _fieldIndex++;
-        _transcript = '';
-      });
+  /// Advances to the next field. Fully awaits stop() before allowing
+  /// the next field's listen() to be triggered — guarded by _busy the
+  /// same way press/release are, which is what prevents rapid
+  /// skip-skip-skip from leaving the engine in a desynced state.
+  Future<void> _advance() async {
+    setState(() {
+      _busy = true;
+      _retryHint = null;
+    });
+    try {
+      if (_isListening || _warmingUp) {
+        await _speech.stop();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _warmingUp = false;
+          if (_fieldIndex >= _kVoiceFields.length - 1) {
+            _done = true;
+          } else {
+            _fieldIndex++;
+            _transcript = '';
+          }
+        });
+      }
     }
   }
 
   String _formatForField(double value) {
-    // Show integers without a decimal point, decimals up to 6 places.
     if (value == value.roundToDouble()) return value.toInt().toString();
     var s = value.toStringAsFixed(6);
     s = s.replaceFirst(RegExp(r'0+$'), '');
@@ -564,10 +691,6 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     return s;
   }
 
-  // ---------------------------------------------------------------------
-  // Small bilingual label helper for this modal's own static UI text —
-  // NOT for field names (those come from _VoiceField.labelEn/labelUr).
-  // ---------------------------------------------------------------------
   String _t(String en, String ur) => _isUrdu ? ur : en;
 
   @override
@@ -587,7 +710,6 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Drag handle
             Container(
               width: 40,
               height: 4,
@@ -602,7 +724,7 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
               _LanguageToggle(
                 current: _lang,
                 urduAvailable: _urduAvailable,
-                enabled: _initError == null && !_done,
+                enabled: _initError == null && !_done && !_busy,
                 onChanged: _setLang,
               ),
             const SizedBox(height: 16),
@@ -649,7 +771,6 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
                 child: Text(_t('Done', 'مکمل')),
               ),
             ] else ...[
-              // Progress
               Text(
                 _t(
                   'Field ${_fieldIndex + 1} of ${_kVoiceFields.length}',
@@ -665,7 +786,6 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
               ),
               const SizedBox(height: 20),
 
-              // Current field name
               Text(
                 _fieldLabel,
                 textDirection: _isUrdu ? TextDirection.rtl : TextDirection.ltr,
@@ -682,7 +802,6 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
               ),
               const SizedBox(height: 16),
 
-              // Live transcript box
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
@@ -702,7 +821,9 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
                     Expanded(
                       child: Text(
                         _transcript.isEmpty
-                            ? (_isListening
+                            ? (_warmingUp
+                            ? _t('Get ready…', 'تیار ہو جائیں…')
+                            : _isListening
                             ? _t('Listening…', 'سن رہا ہے…')
                             : _t('Hold the mic button below', 'نیچے مائیک کا بٹن دبائیں'))
                             : _transcript,
@@ -719,45 +840,65 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
                         ),
                       ),
                     ),
-                    if (_isListening)
+                    if (_isListening || _warmingUp)
                       Icon(Icons.graphic_eq, color: colorScheme.primary),
                   ],
                 ),
               ),
+
+              // Inline hint for routine recoverable errors (timeout /
+              // no-match / busy). Distinct from the fatal _initError
+              // screen above — this never blocks the modal, it just
+              // tells the user the last attempt didn't register and to
+              // try the mic again.
+              if (_retryHint != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: colorScheme.error),
+                    const SizedBox(width: 4),
+                    Text(
+                      _retryHint!,
+                      style: TextStyle(fontSize: 12, color: colorScheme.error),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 24),
 
-              // Hold-to-talk mic button — large, centered, press-and-hold.
               Center(
                 child: _MicButton(
                   isListening: _isListening,
-                  onDown: _onMicDown,
-                  onUp: _onMicUp,
+                  isWarmingUp: _warmingUp,
+                  enabled: !_busy || _isListening || _warmingUp,
+                  onDown: _onPointerDown,
+                  onUp: _onPointerUp,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                _isListening
+                _warmingUp
+                    ? _t('Starting…', 'شروع ہو رہا ہے…')
+                    : _isListening
                     ? _t('Release to stop', 'چھوڑنے پر رک جائے گا')
                     : _t('Press and hold to talk', 'بولنے کے لیے دبا کر رکھیں'),
                 style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 20),
 
-              // Action buttons — Skip / Confirm. Re-record is just
-              // holding the mic again, so there's no separate button
-              // for it anymore.
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _skip,
+                      onPressed: _busy ? null : _skip,
                       child: Text(_t('Skip', 'چھوڑیں')),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton(
-                      onPressed: _transcript.trim().isEmpty ? null : _confirm,
+                      onPressed: (_busy || _transcript.trim().isEmpty) ? null : _confirm,
                       child: Text(_t('Confirm', 'تصدیق')),
                     ),
                   ),
@@ -782,19 +923,24 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   }
 }
 
-/// Large press-and-hold mic button, WhatsApp-voice-note style.
-/// GestureDetector's onTapDown/onTapUp/onTapCancel map directly onto
-/// "press" / "release" / "release outside the button" — onTapCancel
-/// matters because if the user's finger slides off the button while
-/// held, that should still stop listening, the same way letting go of
-/// a real voice-note button anywhere stops the recording.
+/// Large press-and-hold mic button. Uses Listener (raw pointer events)
+/// instead of GestureDetector's tap callbacks — see the class-level doc
+/// comment in _VoiceInputModalState for exactly why that distinction
+/// fixed the "mic press not registering" bug. onPointerCancel is wired
+/// the same as onPointerUp so that a finger sliding off the button
+/// still stops listening, the same way releasing a real voice-note
+/// button anywhere stops the recording.
 class _MicButton extends StatelessWidget {
   final bool isListening;
-  final VoidCallback onDown;
-  final VoidCallback onUp;
+  final bool isWarmingUp;
+  final bool enabled;
+  final Future<void> Function() onDown;
+  final Future<void> Function() onUp;
 
   const _MicButton({
     required this.isListening,
+    required this.isWarmingUp,
+    required this.enabled,
     required this.onDown,
     required this.onUp,
   });
@@ -802,22 +948,28 @@ class _MicButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final active = isListening || isWarmingUp;
 
-    return GestureDetector(
-      onTapDown: (_) => onDown(),
-      onTapUp: (_) => onUp(),
-      onTapCancel: onUp,
+    return Listener(
+      onPointerDown: enabled ? (_) => onDown() : null,
+      onPointerUp: enabled ? (_) => onUp() : null,
+      onPointerCancel: enabled ? (_) => onUp() : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: isListening ? 84 : 72,
-        height: isListening ? 84 : 72,
+        width: active ? 84 : 72,
+        height: active ? 84 : 72,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isListening ? colorScheme.error : colorScheme.primary,
-          boxShadow: isListening
+          color: isWarmingUp
+              ? colorScheme.tertiary
+              : isListening
+              ? colorScheme.error
+              : (enabled ? colorScheme.primary : colorScheme.outlineVariant),
+          boxShadow: active
               ? [
             BoxShadow(
-              color: colorScheme.error.withValues(alpha: 0.3),
+              color: (isListening ? colorScheme.error : colorScheme.tertiary)
+                  .withValues(alpha: 0.3),
               blurRadius: 16,
               spreadRadius: 4,
             ),
@@ -825,8 +977,12 @@ class _MicButton extends StatelessWidget {
               : null,
         ),
         child: Icon(
-          isListening ? Icons.graphic_eq : Icons.mic,
-          color: isListening ? colorScheme.onError : colorScheme.onPrimary,
+          isWarmingUp
+              ? Icons.hourglass_top
+              : isListening
+              ? Icons.graphic_eq
+              : Icons.mic,
+          color: active ? colorScheme.onError : colorScheme.onPrimary,
           size: 32,
         ),
       ),
