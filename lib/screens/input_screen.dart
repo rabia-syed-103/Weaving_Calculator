@@ -7,9 +7,27 @@
 /// Layout: 2-column grid via Wrap, grouped into labeled sections, all
 /// labels in Title Case. Ply and Warp Blend sit side-by-side in one row.
 /// Input Inflow and Target Price sit immediately after the headline card.
-/// Voice input: ONE floating mic button (bottom-right) — no per-field
-/// mic icons. Tapping it should open the voice modal (Phase 6, Rabia) —
-/// for now it calls _startVoiceInput() which is a stub, see TODO below.
+///
+/// VOICE INPUT (Step 19 — now wired up):
+/// The FAB mic button calls _startVoiceInput(), which opens
+/// VoiceInputModal as a modal bottom sheet via showModalBottomSheet().
+/// The modal is handed this screen's own _controllers map directly —
+/// it writes into the SAME TextEditingControllers the rest of the form
+/// uses, so every controller's existing listener (the one that drives
+/// _recalculate()) fires naturally as the modal fills in each field.
+/// No separate "apply voice results" step is needed: by the time the
+/// modal closes, _recalculate() has already run for every field it
+/// touched, exactly as if the user had typed each value by hand.
+///
+/// Warp Blend is NOT filled by voice (it's a dropdown, not a
+/// TextEditingController) — VoiceInputModal skips it in its field list
+/// and tells the user to set it manually. After the modal closes,
+/// _maybeUpdateSizingCost() and _recalculate() are triggered again here
+/// as a safety net, in case the LAST field the modal filled was Warp
+/// Count or Ply but Warp Blend still isn't set yet (so Sizing Cost / Kg
+/// and the headline numbers reflect the final form state once the
+/// sheet is dismissed, not just whatever was true mid-flow).
+///
 /// Theme: changed only via the side drawer (hamburger icon, top-left) —
 /// see widgets/settings_drawer.dart.
 ///
@@ -91,6 +109,7 @@ import '../theme/costing_provider.dart';
 import '../widgets/headline_banner.dart';
 import '../widgets/input_field_card.dart';
 import '../widgets/share_action_button.dart';
+import '../widgets/voice_input_modal.dart';
 import 'main_nav_shell.dart';
 
 const List<String> kWarpBlendOptions = ['Ctn', 'Pc', 'Pv', 'Pp', 'Cvc', 'Viscose'];
@@ -346,10 +365,40 @@ class _InputScreenState extends State<InputScreen> {
     // it will auto-update when _recalculate() runs from the listeners.
   }
 
-  void _startVoiceInput() {
-    // TODO (Phase 6): open the voice modal — mic button, live transcript,
-    // skip/confirm — and fill _controllers (and _warpBlend) in field
-    // order as the user speaks. See project manual Section 5.3 / Phase 6.
+  /// STEP 19 — opens the voice-fill modal as a bottom sheet.
+  ///
+  /// VoiceInputModal is handed _controllers DIRECTLY (the same map every
+  /// other field in this screen writes to) — not a copy. As the modal
+  /// confirms each spoken value, it writes straight into the matching
+  /// TextEditingController, which means that controller's own listener
+  /// (already wired up in initState() above) fires immediately, exactly
+  /// like a normal keystroke would. So _recalculate() and
+  /// _maybeUpdateSizingCost() run incrementally AS the user speaks
+  /// through the fields — there's no separate "import voice results"
+  /// step after the sheet closes.
+  ///
+  /// isScrollControlled: true lets the sheet take up more height than
+  /// the default bottom-sheet cap, since VoiceInputModal's content
+  /// (progress bar, transcript box, three action buttons) is taller
+  /// than a typical bottom sheet.
+  ///
+  /// After the sheet closes (await returns — whether via the Done
+  /// button or a swipe-to-dismiss), _maybeUpdateSizingCost() and
+  /// _recalculate() are called once more as a safety net: if the very
+  /// last field the user spoke was Warp Count or Ply, and they hadn't
+  /// set Warp Blend from the dropdown yet at that moment, this catches
+  /// up Sizing Cost / Kg and the headline numbers once the user is back
+  /// on the main form and (presumably) about to pick Warp Blend
+  /// manually. Harmless no-op if everything was already current.
+  Future<void> _startVoiceInput() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => VoiceInputModal(controllers: _controllers),
+    );
+    if (!mounted) return;
+    _maybeUpdateSizingCost();
+    _recalculate();
   }
 
   /// [solveFrom] is non-null when this call was triggered by editing

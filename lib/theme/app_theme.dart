@@ -12,7 +12,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-enum AccentColor { green, teal, blue, purple, coral }
+enum AccentColor { green, teal, blue, purple,yellow }
 
 extension AccentColorLabel on AccentColor {
   String get label {
@@ -25,8 +25,8 @@ extension AccentColorLabel on AccentColor {
         return 'Blue';
       case AccentColor.purple:
         return 'Purple';
-      case AccentColor.coral:
-        return 'Coral';
+      case AccentColor.yellow:
+        return 'YeLLow';
     }
   }
 }
@@ -41,7 +41,7 @@ class AppTheme {
     AccentColor.teal: Color(0xFF0F6E56),
     AccentColor.blue: Color(0xFF185FA5),
     AccentColor.purple: Color(0xFF534AB7),
-    AccentColor.coral: Color(0xFF993C1D),
+    AccentColor.yellow: Color(0xFFFFF2CC),
   };
 
   static ThemeData build({
