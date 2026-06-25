@@ -1,9 +1,10 @@
 /// voice_input_modal.dart
 /// -----------------------------------------------------------------------
 /// Step 19 — Voice input modal. Opens as a bottom sheet when the user
-/// taps the FAB mic button on InputScreen. Walks through every field in
-/// sequence (numeric fields first, text fields at the end), shows a live
-/// transcript, and lets the user confirm, skip, or re-speak each value.
+/// taps the FAB mic button on InputScreen. Walks through a reduced set
+/// of fields in sequence, shows a live transcript AND a directly-
+/// editable input for the current field, and lets the user confirm,
+/// skip, or re-speak each value.
 ///
 /// PACKAGE SETUP (pubspec.yaml):
 ///   dependencies:
@@ -20,11 +21,74 @@
 ///   <key>NSSpeechRecognitionUsageDescription</key>
 ///   <string>Used to fill in the costing form by voice</string>
 ///
-/// FIELD ORDER:
-/// Numeric fields first (in the same visual order as the screen), then
-/// text fields. Warp Blend is a dropdown so it is intentionally SKIPPED
-/// — the user must set it manually via the dropdown before or after
-/// voice input. A hint in the UI tells them this.
+/// FIELD LIST — REDUCED SCOPE:
+/// Voice input now only covers these 15 fields, in this order. Every
+/// other field that used to be in the voice sequence (Shrinkage%,
+/// Wastage%, Commission%, Packing/Freight cost, Off Grade%, Off Grade
+/// Recovery, Loom RPM/Efficiency, Pick Insertion, Widths Per Loom,
+/// Number Of Looms, Total Order) is NOT removed from the app — it still
+/// exists and is still editable on the main input screen exactly as
+/// before. It's just no longer reachable through this voice modal.
+///   1. Input Inflow     (text)
+///   2. Target Price     (number)
+///   3. Warp Blend        (radio: Cotton/Ctn, Pv, Pc, Cvc, Pp, Viscose)
+///   4. Ply               (radio: 1 / 2 / Other free-text)
+///   5. Warp Count        (number)
+///   6. Weft Count        (number)
+///   7. Ends Per Inch     (number)
+///   8. Picks Per Inch    (number)
+///   9. Width             (number)
+///  10. Weave             (text)
+///  11. Selvedge          (text)
+///  12. Writing           (text)
+///  13. Warp Yarn Rate    (number)
+///  14. Weft Yarn Rate    (number)
+///  15. Input Per Pick    (number)
+///
+/// WARP BLEND — voice-driven radio, auto-selected on a confident match:
+/// Warp Blend used to be skipped entirely because it was a dropdown.
+/// It's now a first-class voice field. The label set is intentionally
+/// identical in English and Urdu mode (Cotton/Ctn, Pv, Pc, Cvc, Pp,
+/// Viscose) since these are industry abbreviations, not translatable
+/// words. A small fuzzy matcher (_WarpBlendMatcher) maps the spoken
+/// transcript to one of the six codes. On CONFIRM, if the transcript
+/// matches one of them with reasonable confidence, that radio is
+/// auto-selected immediately — no extra tap needed. If nothing matches,
+/// no radio is pre-selected and the person just taps one manually; the
+/// radios are always tappable regardless of voice, same as every other
+/// field staying manually editable (see EVERY FIELD STAYS EDITABLE).
+///
+/// PLY — voice-driven radio with a free-text escape hatch:
+/// Ply is overwhelmingly 1 or 2 in practice, so it's two big radio
+/// options for fast entry, but other values are not discarded — a
+/// third "Other" slot holds a small text field for anything else (e.g.
+/// 3-ply). On CONFIRM: a parsed "1" or "2" selects that radio directly;
+/// any other parsed number selects the Other radio and fills its text
+/// field with that number, so it's visible and still editable.
+///
+/// EVERY FIELD STAYS EDITABLE:
+/// Previously, confirming a field's voice transcript wrote a final
+/// value into the controller and moved on — there was no way to see or
+/// correct that value without leaving the voice flow. Now each field
+/// card always shows a live, directly-editable input (a TextField for
+/// text/numeric fields, or a radio group for Warp Blend/Ply) bound to
+/// the SAME controller voice writes into. Speaking a value fills the
+/// field; the person can also just tap into it and type/correct it by
+/// hand at any point — before speaking, after speaking, or instead of
+/// speaking — without that being a separate mode. Confirm/Skip just
+/// move the sequence forward; they don't lock or finalize anything (the
+/// value is already live in the controller the moment it's typed or
+/// recognized, exactly like the rest of the input screen).
+///
+/// NO MORE "DIDN'T CATCH THAT" RETRY HINT:
+/// A previous version showed a small red "Didn't catch that — try
+/// again" hint under the transcript box whenever a recoverable engine
+/// error or an empty result happened. Removed per request — since the
+/// field is always directly editable now anyway, an empty transcript
+/// is self-evident from the field just being empty, and doesn't need a
+/// separate scolding message. The underlying recoverable-error handling
+/// itself is unchanged (still doesn't lock the modal), only the visible
+/// hint text is gone.
 ///
 /// HOLD-TO-TALK — uses Listener instead of GestureDetector:
 /// GestureDetector's onTapDown/onTapUp/onTapCancel are TAP gesture
@@ -43,87 +107,50 @@
 /// session and signalling "go ahead and speak" so the user doesn't
 /// start talking into a half-started engine.
 ///
-/// SINGLE-WORD RECOGNITION — listenMode.dictation:
-/// This is a contributing fix for short words being missed (the
-/// warm-up delay alone does not fully solve it). speech_to_text exposes
-/// a `listenMode` that controls how the underlying platform recognizer
-/// is configured:
-///   - ListenMode.confirmation (the package default if you don't set
-///     it) is tuned for short yes/no-style command phrases and is more
-///     aggressive about deciding "nothing useful was said" quickly.
-///   - ListenMode.confirmation is tuned for free-form speech and is more
-///     forgiving of a single isolated word with silence on either side.
-/// Switched to ListenMode.confirmation below.
-///
-/// SINGLE-WORD RECOGNITION — release grace delay (the actual fix):
+/// SINGLE-WORD RECOGNITION — release grace wait, tuned from live device
+/// logs (this is the actual fix, not just the warm-up delay):
 /// Reported symptom: a single isolated digit ("1", "2", "5"...) spoken
-/// alone is never captured — the transcript stays empty — but saying
-/// the same digit twice ("one one") works every time, and is
-/// transcribed straight to "11" by the recognizer itself.
+/// alone was never captured, while two-syllable utterances always
+/// worked. Live debug logging on-device showed the real shape of the
+/// problem: calling _speech.stop() while the engine is still scoring a
+/// short utterance makes the engine abandon that recognition rather
+/// than finish it, and the eventual callback comes back empty. So
+/// _onPointerUp no longer calls stop() immediately on release. Instead
+/// it waits (polling in short steps, up to ~700ms) for an actual FINAL
+/// result to arrive on its own — only if none shows up in that window
+/// does it fall back to calling stop() itself. A short additional
+/// "settle" delay after stop() gives any trailing callbacks room to
+/// land before the busy-guard is released, which is what prevented the
+/// next listen() session from colliding with a previous one that
+/// hadn't fully torn down yet (seen live as error_client).
 ///
-/// Root cause: this is NOT a recognition-quality problem, it's a
-/// timing problem in THIS widget. _onPointerUp calls _speech.stop()
-/// the instant the finger lifts. For a single short syllable, the
-/// finger lifts almost immediately after the word is spoken — often
-/// before the recognizer has finished turning its in-flight partial
-/// result into a confident final one. stop() cuts the engine off mid-
-/// process, and what comes back is an empty, low-confidence final
-/// result (matches the documented platform behavior: a final result
-/// with confidence -1.0 and empty recognizedWords is what the engine
-/// emits when a session is torn down before it finishes scoring what
-/// it heard). A two-syllable utterance survives because the natural
-/// time it takes to say it gives the engine enough headroom before the
-/// hold is released.
-///
-/// Fixed with a short grace delay (350ms) inserted at the START of
-/// _onPointerUp, before stop() is called. This does NOT make the UI
-/// feel slow — the engine is still actively listening during that
-/// window (partialResults keep flowing into _transcript exactly as
-/// before), it just delays the moment stop() is issued so a trailing
-/// single word has time to finalize. If a later partial result arrives
-/// during the grace delay, it preempts the delay immediately rather
-/// than waiting out the full 350ms unnecessarily.
-///
-/// ERROR HANDLING — recoverable vs fatal, and the permanent-lock bug:
+/// ERROR HANDLING — recoverable vs fatal:
 /// Every error speech_to_text reports comes through one onError
-/// callback, but they are NOT all the same severity:
-///   - error_speech_timeout / error_no_match / error_busy are routine,
-///     expected, recoverable conditions — Android's native
-///     SpeechRecognizer enforces its own short "didn't hear anything
-///     yet" timeout internally and WILL fire this if the engine starts
-///     listening but doesn't detect audio within its own internal
-///     window. Critically, pauseFor/listenFor (the durations this
-///     widget passes in) do NOT override that internal Android timeout
-///     — see the package docs: pauseFor is documented as being ignored
-///     on Android, which enforces its own (much shorter) pause/timeout
-///     behavior regardless of what's requested. So even with
-///     listenFor/pauseFor set to 2 minutes, Android can still decide on
-///     its own that "too much silence has passed" and emit
-///     error_speech_timeout while the user is still holding the button.
-///   - error_audio_error / error_client / permission-related errors are
-///     genuinely fatal — something is actually broken and retrying
-///     won't help.
-/// The previous version treated ALL errors as fatal: onError always set
-/// _initError, and the UI permanently locks into a "Microphone Not
-/// available" dead-end screen the instant _initError is non-null, with
-/// no path back except closing the whole modal. That's why one routine
-/// timeout on field 3 could brick the rest of the session even though
-/// the mic hardware and permissions were completely fine.
-/// Fixed by classifying errors: recoverable ones just reset the
-/// listening state (with a small inline "didn't catch that" hint) so
-/// the user can immediately press and try again; only genuinely fatal
-/// errors show the dead-end screen.
+/// callback, but they are NOT all the same severity. error_speech_
+/// timeout / error_no_match / error_busy / error_client are routine,
+/// expected, recoverable conditions (confirmed via live debug logging,
+/// not just docs) — they just reset listening state silently so the
+/// user can immediately press and try again. Only genuinely fatal
+/// errors (hardware/permission related) show the dead-end "Microphone
+/// not available" screen.
 ///
-/// BUSY GUARD — mic getting permanently stuck after rapid skips/errors:
+/// ENGINE SINGLETON:
+/// SpeechToText is created and initialize()'d exactly ONCE per app
+/// session via the VoiceEngine singleton below, not once per modal
+/// open. Re-creating/re-initializing per modal open was confirmed (live
+/// debug logging) to cause "listening starts, shows for about a
+/// second, then silently stops" on the second and later opens, because
+/// the native recognizer session from the previous open hadn't fully
+/// released before a brand new instance tried to initialize.
+///
+/// BUSY GUARD:
 /// Any stop()/listen() call sets _busy true and is awaited fully before
 /// clearing it, and the mic button (and Skip/Confirm) ignore taps while
 /// _busy is true. This serializes every engine interaction instead of
 /// letting overlapping calls race and desync speech_to_text's internal
-/// state. The error path now ALSO guarantees _busy/_warmingUp/
-/// _isListening are reset in a finally-equivalent block, since a
-/// mid-flight error is exactly the case most likely to leave one of
-/// those flags stuck true (which is what made the mic stop responding
-/// to presses at all, not just stop showing transcripts).
+/// state. The error path also unconditionally clears _busy/_warmingUp/
+/// _isListening, since a mid-flight error is exactly the case most
+/// likely to leave one of those flags stuck true otherwise.
 library;
 
 import 'dart:async';
@@ -132,55 +159,41 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 
+// =========================================================================
+// FIELD MODEL
+// =========================================================================
+
+enum _FieldKind { text, number, warpBlend, ply }
+
 /// One field in the voice-fill sequence.
 class _VoiceField {
   final String key;
   final String labelEn;
   final String labelUr;
-  final bool isText; // false = numeric, true = text
+  final _FieldKind kind;
 
-  const _VoiceField(this.key, this.labelEn, this.labelUr, {this.isText = false});
+  const _VoiceField(
+      this.key, this.labelEn, this.labelUr, {this.kind = _FieldKind.number});
 }
 
-/// All fields in order. Warp Blend (dropdown) and Sizing Cost / Kg
-/// (auto-lookup, editable separately) are intentionally excluded.
+/// The reduced 15-field voice sequence. See the FIELD LIST — REDUCED
+/// SCOPE doc comment above for why these specific 15 and this order.
 const List<_VoiceField> _kVoiceFields = [
-  // Inflow & Target
-  _VoiceField('inputInflow', 'Input Inflow', 'انپٹ ان فلو'),
+  _VoiceField('inputInflow', 'Input Inflow', 'انپٹ ان فلو', kind: _FieldKind.text),
   _VoiceField('targetPrice', 'Target Price', 'ٹارگٹ پرائس'),
-  // Fabric Specification — numeric
-  _VoiceField('ply', 'Ply', 'پلائی'),
+  _VoiceField('warpBlend', 'Warp Blend', 'وارپ بلینڈ', kind: _FieldKind.warpBlend),
+  _VoiceField('ply', 'Ply', 'پلائی', kind: _FieldKind.ply),
   _VoiceField('warpCount', 'Warp Count', 'وارپ کاؤنٹ'),
   _VoiceField('weftCount', 'Weft Count', 'ویفٹ کاؤنٹ'),
   _VoiceField('endsPerInch', 'Ends Per Inch', 'اینڈز پر انچ'),
   _VoiceField('picksPerInch', 'Picks Per Inch', 'پکس پر انچ'),
   _VoiceField('width', 'Width', 'چوڑائی'),
-  // Shrinkage & Wastage
-  _VoiceField('warpShrinkagePct', 'Warp Shrinkage Percent', 'وارپ شرنکیج فیصد'),
-  _VoiceField('weftShrinkagePct', 'Weft Shrinkage Percent', 'ویفٹ شرنکیج فیصد'),
-  _VoiceField('warpWastagePct', 'Warp Wastage Percent', 'وارپ ضیاع فیصد'),
-  _VoiceField('weftWastagePct', 'Weft Wastage Percent', 'ویفٹ ضیاع فیصد'),
-  // Rates & Costing
+  _VoiceField('weave', 'Weave', 'ویو', kind: _FieldKind.text),
+  _VoiceField('selvedge', 'Selvedge', 'سیلویج', kind: _FieldKind.text),
+  _VoiceField('writing', 'Writing', 'تحریر', kind: _FieldKind.text),
   _VoiceField('warpYarnRate', 'Warp Yarn Rate', 'وارپ یارن ریٹ'),
   _VoiceField('weftYarnRate', 'Weft Yarn Rate', 'ویفٹ یارن ریٹ'),
-  _VoiceField('commissionPct', 'Commission Percent', 'کمیشن فیصد'),
   _VoiceField('inputPerPick', 'Input Per Pick', 'انپٹ پر پک'),
-  _VoiceField('packingCost', 'Packing Cost', 'پیکنگ لاگت'),
-  _VoiceField('freightCost', 'Freight Cost', 'فریٹ لاگت'),
-  // Off Grade
-  _VoiceField('offGradePct', 'Off Grade Percent', 'آف گریڈ فیصد'),
-  _VoiceField('offGradeRecovery', 'Off Grade Recovery', 'آف گریڈ ریکوری'),
-  // Loom & Production
-  _VoiceField('loomRpm', 'Loom RPM', 'لوم آر پی ایم'),
-  _VoiceField('loomEfficiencyPct', 'Loom Efficiency Percent', 'لوم افیشنسی فیصد'),
-  _VoiceField('pickInsertion', 'Pick Insertion', 'پک انسرشن'),
-  _VoiceField('widthsPerLoom', 'Widths Per Loom', 'چوڑائی فی لوم'),
-  _VoiceField('numberOfLooms', 'Number Of Looms', 'لومز کی تعداد'),
-  _VoiceField('totalOrder', 'Total Order', 'کل آرڈر'),
-  // Text fields last
-  _VoiceField('weave', 'Weave', 'ویو', isText: true),
-  _VoiceField('selvedge', 'Selvedge', 'سیلویج', isText: true),
-  _VoiceField('writing', 'Writing', 'تحریر', isText: true),
 ];
 
 enum VoiceLang { english, urdu }
@@ -190,15 +203,53 @@ extension on VoiceLang {
 }
 
 // =========================================================================
+// WARP BLEND — fixed option set, identical labels in both languages
+// =========================================================================
+
+/// The six Warp Blend codes, in display order. Same labels regardless
+/// of _lang — these are industry abbreviations, not translated words.
+const List<String> kWarpBlendOptions = ['Cotton', 'Pv', 'Pc', 'Cvc', 'Pp', 'Viscose'];
+
+class _WarpBlendMatcher {
+  // Each option maps to a set of spoken forms (including the common
+  // "spell it out" alternative, e.g. "Ctn" for Cotton) that should all
+  // resolve to that option being auto-selected on confirm.
+  static const Map<String, List<String>> _aliases = {
+    'Cotton': ['cotton', 'ctn', 'کاٹن'],
+    'Pv': ['pv', 'پی وی'],
+    'Pc': ['pc', 'پی سی'],
+    'Cvc': ['cvc', 'سی وی سی'],
+    'Pp': ['pp', 'پی پی'],
+    'Viscose': ['viscose', 'وسکوز'],
+  };
+
+  /// Returns the matching option from kWarpBlendOptions, or null if the
+  /// transcript doesn't confidently match any of them.
+  static String? match(String raw) {
+    final cleaned = raw.toLowerCase().trim();
+    if (cleaned.isEmpty) return null;
+    for (final entry in _aliases.entries) {
+      for (final alias in entry.value) {
+        if (cleaned == alias || cleaned.contains(alias)) {
+          return entry.key;
+        }
+      }
+    }
+    return null;
+  }
+}
+
+// =========================================================================
 // ERROR CLASSIFICATION
 // =========================================================================
 //
 // speech_to_text reports every engine-level problem through the same
 // onError callback, tagged with a string errorMsg. Not all of them mean
-// the same thing, and treating them identically is what caused the
-// "one timeout bricks the whole modal" bug. This list is the set of
-// codes that are routine/expected and should just let the user try
-// again, not show a dead-end "Microphone Not available" screen.
+// the same thing, and treating them identically caused the "one timeout
+// bricks the whole modal" bug in an earlier version. This list is the
+// set of codes that are routine/expected and should just silently reset
+// listening state, not show a dead-end "Microphone Not available"
+// screen.
 //
 // error_speech_timeout : Android's native SpeechRecognizer didn't
 //                         detect audio within ITS OWN internal timeout
@@ -212,15 +263,8 @@ extension on VoiceLang {
 // error_client            : Confirmed via live debug logging (not just
 //                         docs) to fire when a new listen() session
 //                         starts while the PREVIOUS session is still
-//                         asynchronously finishing its teardown
-//                         (trailing onResult/onStatus callbacks were
-//                         observed arriving after stop() had already
-//                         returned). It's a collision between sessions,
-//                         not a broken mic — confirmed by the same
-//                         physical mic immediately working again on the
-//                         very next attempt once given enough settle
-//                         time. See the post-stop settle delay in
-//                         _onPointerUp.
+//                         asynchronously finishing its teardown. It's a
+//                         collision between sessions, not a broken mic.
 const Set<String> _kRecoverableErrors = {
   'error_speech_timeout',
   'error_no_match',
@@ -425,38 +469,13 @@ class _SpokenNumberParser {
   }
 }
 
-/// ENGINE SINGLETON — fixes "mic stops working after closing and
-/// reopening the modal":
-///
-/// The previous version created `final SpeechToText _speech =
-/// SpeechToText()` directly inside _VoiceInputModalState, and called
-/// `_speech.initialize()` in initState(). That means every time the
-/// bottom sheet was opened, a BRAND NEW SpeechToText instance was
-/// created and a BRAND NEW initialize() call was made — and every time
-/// it was closed, dispose() called stop() on that instance and threw
-/// it away.
-///
-/// This directly contradicts how the package is meant to be used. The
-/// official docs are explicit about it: initialize() is meant to run
-/// ONCE per app session, and warn that "there should be only one
-/// instance of the plugin per application" — repeated initialize()
-/// calls are documented as unreliable for resetting callbacks, and in
-/// practice (confirmed by multiple reports of this exact symptom)
-/// re-initializing a second time can leave the native Android
-/// recognizer session in a half-torn-down state from the previous
-/// instance, which is consistent with "listening starts, shows for
-/// about a second, then silently stops with no error" — the new
-/// session collides with the old one before Android has fully
-/// released it.
-///
-/// Fixed by moving the SpeechToText instance and its one-time
-/// initialize() into this singleton, which lives for the lifetime of
-/// the app process, not the lifetime of the modal widget. The modal
-/// now calls VoiceEngine.ensureInitialized() in initState() instead of
-/// creating+initializing its own instance — the first call actually
-/// initializes the engine, every call after that (including on the
-/// next time the modal is opened) reuses the already-initialized
-/// instance and returns immediately.
+// =========================================================================
+// ENGINE SINGLETON
+// =========================================================================
+//
+// SpeechToText + its one-time initialize() live here, for the lifetime
+// of the app process — NOT recreated per modal open. See the class-
+// level doc comment "ENGINE SINGLETON" above for why.
 class VoiceEngine {
   VoiceEngine._();
   static final VoiceEngine instance = VoiceEngine._();
@@ -469,10 +488,9 @@ class VoiceEngine {
 
   // The modal's current onStatus/onError handlers. Re-pointed every
   // time a modal attaches (see attach()) since speech_to_text only
-  // lets you set these once via initialize() — see class doc comment.
-  // Calls are forwarded here instead, so each new modal instance still
-  // gets live status/error callbacks despite initialize() only really
-  // running the first time.
+  // lets you set these once via initialize(). Calls are forwarded here
+  // instead, so each new modal instance still gets live status/error
+  // callbacks despite initialize() only really running the first time.
   void Function(String status)? _onStatus;
   void Function(SpeechRecognitionError error)? _onError;
 
@@ -496,9 +514,7 @@ class VoiceEngine {
 
   /// Points the engine's callbacks at whichever modal instance is
   /// currently on screen. Called from the modal's initState() right
-  /// after ensureInitialized(), and cleared in dispose() so a modal
-  /// that's gone doesn't keep receiving callbacks (and so it doesn't
-  /// call setState() after being unmounted).
+  /// after ensureInitialized(), and cleared in dispose().
   void attach({
     required void Function(String status) onStatus,
     required void Function(SpeechRecognitionError error) onError,
@@ -513,8 +529,16 @@ class VoiceEngine {
   }
 }
 
+// =========================================================================
+// MODAL WIDGET
+// =========================================================================
+
 class VoiceInputModal extends StatefulWidget {
   /// The controllers map from InputScreen — same keys as _controllers.
+  /// Must contain entries for at least the 15 keys in _kVoiceFields
+  /// (warpBlend and ply included, even though those are presented as
+  /// radio groups rather than free text — their controller still holds
+  /// the resulting string value, exactly like every other field).
   final Map<String, TextEditingController> controllers;
 
   const VoiceInputModal({super.key, required this.controllers});
@@ -531,16 +555,10 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   bool _speechAvailable = false;
 
   // Fatal init/hardware/permission problem — shows the permanent
-  // dead-end screen. Distinct from _retryHint below, which is for
-  // routine recoverable errors that should NOT lock the modal.
+  // dead-end screen. Recoverable engine errors (see _kRecoverableErrors)
+  // do NOT set this — they're silently absorbed instead (no visible
+  // hint anymore, per request).
   String? _initError;
-
-  // Set briefly when a RECOVERABLE error (timeout / no-match / busy)
-  // happens mid-session. Shown as a small inline hint near the
-  // transcript box ("Didn't catch that — try again") instead of
-  // replacing the whole modal. Cleared automatically on the next
-  // press of the mic.
-  String? _retryHint;
 
   // Driven by speech_to_text's onStatus callback — the only reliable
   // source of truth for whether the mic is live right now.
@@ -553,30 +571,23 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   bool _warmingUp = false;
 
   // BUSY GUARD — true for the entire duration of any stop()/listen()
-  // call this widget makes, from the moment it's invoked until it (and
-  // any warm-up delay) fully completes. The mic button and Skip/Confirm
-  // ignore input while this is true, which prevents overlapping engine
-  // calls from racing each other. Also force-cleared whenever onError
-  // fires, since a mid-flight error is the case most likely to leave
-  // this stuck true otherwise (see class-level doc comment).
+  // call this widget makes. The mic button and Skip/Confirm ignore
+  // input while this is true, which prevents overlapping engine calls
+  // from racing each other. Also force-cleared whenever onError fires.
   bool _busy = false;
 
+  // Live transcript for the CURRENT field. This is purely a display of
+  // what voice most recently produced — the actual value lives in the
+  // field's TextEditingController (see EVERY FIELD STAYS EDITABLE),
+  // which the person can also edit directly regardless of this.
   String _transcript = '';
 
-  // Bumped every time _handleResult fires with a non-empty transcript.
-  // Used by _onPointerUp's grace delay to detect "a new result just
-  // came in, so the engine made more progress — stop waiting and
-  // finalize now" instead of always waiting out the full grace window.
-  int _resultRevision = 0;
-
   // Set true the instant a FINAL (not partial) result arrives from the
-  // engine. _onPointerUp's grace wait polls this instead of just "any
-  // result happened" — see the live-debug-log-driven rewrite of
-  // _onPointerUp for why waiting specifically for a final result (and
-  // only falling back to calling stop() ourselves if one never shows
-  // up in time) is what actually fixes single-word loss, vs. the
-  // earlier version which waited for any result and then called
-  // stop() regardless.
+  // engine during the current listen() session. _onPointerUp's grace
+  // wait polls this — see the class-level "SINGLE-WORD RECOGNITION" doc
+  // comment for why waiting specifically for a final result (rather
+  // than calling stop() immediately, or waiting for any result) is what
+  // actually fixes short isolated words being lost.
   bool _gotFinalResult = false;
 
   int _fieldIndex = 0; // current position in _kVoiceFields
@@ -586,12 +597,22 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   bool _urduAvailable = false;
   bool _checkingLocales = true;
 
+  // Free-text controller backing the Ply field's "Other" slot. Kept
+  // separate from widget.controllers['ply'] (which always holds the
+  // single source of truth for Ply's value) so the text field has
+  // something stable to bind to even while "1" or "2" is selected.
+  final TextEditingController _plyOtherController = TextEditingController();
+
   _VoiceField get _currentField => _kVoiceFields[_fieldIndex];
 
   bool get _isUrdu => _lang == VoiceLang.urdu;
 
   String get _fieldLabel =>
       _isUrdu ? _currentField.labelUr : _currentField.labelEn;
+
+  TextEditingController get _currentController =>
+      widget.controllers[_currentField.key] ??
+          (widget.controllers[_currentField.key] = TextEditingController());
 
   @override
   void initState() {
@@ -602,28 +623,31 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     // onError already have somewhere to go.
     VoiceEngine.instance.attach(onStatus: _handleStatus, onError: _handleError);
     _initSpeech();
+
+    // Seed the Ply "Other" text field from whatever the controller
+    // already holds, in case the modal is reopened with Ply already
+    // set to something outside 1/2 from a previous session.
+    final existingPly = widget.controllers['ply']?.text.trim();
+    if (existingPly != null && existingPly != '1' && existingPly != '2') {
+      _plyOtherController.text = existingPly;
+    }
   }
 
   @override
   void dispose() {
     // Stop any in-flight listening session, but do NOT tear down or
     // replace the shared engine instance itself — see the VoiceEngine
-    // class doc comment for why re-creating/re-initializing per modal
-    // open is exactly what caused "mic stops responding after closing
-    // and reopening the modal." detach() so this now-dead State stops
-    // receiving callbacks (and can't call setState() after unmount).
+    // class doc comment.
     _speech.stop();
     VoiceEngine.instance.detach();
+    _plyOtherController.dispose();
     super.dispose();
   }
 
   /// Uses VoiceEngine.ensureInitialized() instead of calling
   /// _speech.initialize() directly — on the first modal open this runs
-  /// the real initialize() once; on every later open (including after
-  /// fully closing and reopening the modal) it just returns the
-  /// already-known availability immediately, without touching the
-  /// native recognizer session at all. See the VoiceEngine class doc
-  /// comment for the full story.
+  /// the real initialize() once; on every later open it just returns
+  /// the already-known availability immediately.
   Future<void> _initSpeech() async {
     try {
       final available = await VoiceEngine.instance.ensureInitialized();
@@ -646,32 +670,22 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   }
 
   void _handleStatus(String status) {
-    // ignore: avoid_print
-    print('[VOICE-DEBUG] onStatus: $status');
     if (!mounted) return;
     setState(() {
       _isListening = status == 'listening';
     });
   }
 
-  /// Single entry point for every engine-level error, called both
-  /// during the initial speech.initialize() and during any listen()
-  /// session. The critical fix here vs. the previous version: this no
-  /// longer unconditionally sets _initError (which permanently locks
-  /// the modal into the dead-end screen). Routine/expected errors are
-  /// classified via _kRecoverableErrors and just reset listening state
-  /// with a small retry hint; only genuinely fatal errors set
-  /// _initError.
+  /// Single entry point for every engine-level error. Recoverable codes
+  /// (_kRecoverableErrors) just silently reset listening state so the
+  /// user can immediately try again — no visible hint text anymore, per
+  /// request. Only genuinely fatal errors set _initError and show the
+  /// dead-end screen.
   ///
-  /// Also unconditionally clears _busy/_isListening/_warmingUp — an
-  /// error happening mid-listen is exactly the scenario where those
-  /// flags are most likely to be left stuck true by a race between the
-  /// error path and whatever _onPointerDown/_onPointerUp/_advance call
-  /// happened to be in flight, which is what made the mic stop
-  /// responding to ANY press at all (not just stop producing text).
+  /// Unconditionally clears _busy/_isListening/_warmingUp regardless of
+  /// severity — an error happening mid-listen is exactly the scenario
+  /// where those flags are most likely to be left stuck true otherwise.
   void _handleError(SpeechRecognitionError error) {
-    // ignore: avoid_print
-    print('[VOICE-DEBUG] onError: ${error.errorMsg} permanent=${error.permanent}');
     if (!mounted) return;
 
     final isRecoverable = _kRecoverableErrors.contains(error.errorMsg);
@@ -680,12 +694,7 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
       _isListening = false;
       _warmingUp = false;
       _busy = false;
-
-      if (isRecoverable) {
-        _retryHint = error.errorMsg == 'error_no_match'
-            ? _t('Didn\'t catch that — try again', 'سمجھ نہیں آیا — دوبارہ کوشش کریں')
-            : _t('Didn\'t hear you in time — try again', 'وقت پر آواز نہیں آئی — دوبارہ کوشش کریں');
-      } else {
+      if (!isRecoverable) {
         _initError = error.errorMsg;
       }
     });
@@ -720,23 +729,8 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   }
 
   /// HOLD-TO-TALK — press down. Called from a Listener's onPointerDown,
-  /// not a GestureDetector tap callback — see the class-level doc
-  /// comment "HOLD-TO-TALK" for why that distinction matters.
-  ///
-  /// Guarded by _busy so a press that lands while a previous stop() is
-  /// still finishing is ignored instead of racing it.
-  ///
-  /// listenMode is explicitly set to ListenMode.confirmation — see the
-  /// class-level doc comment "SINGLE-WORD RECOGNITION" for why this
-  /// (not just the warm-up delay) is the actual fix for short isolated
-  /// words being missed.
-  ///
-  /// After listen() starts, a 250ms warm-up delay runs before
-  /// _warmingUp clears. The user can still speak during this window
-  /// (the engine IS recording), but the UI distinguishes "still
-  /// warming up" from "fully listening" so very short words spoken
-  /// right at press-down aren't the first thing said to a
-  /// half-started engine.
+  /// not a GestureDetector tap callback — see the class-level "HOLD-TO-
+  /// TALK" doc comment for why that distinction matters.
   Future<void> _onPointerDown() async {
     if (!_speechAvailable || _done || _busy || _isListening) return;
 
@@ -744,25 +738,20 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
       _busy = true;
       _warmingUp = true;
       _transcript = '';
-      _retryHint = null;
-      _resultRevision = 0;
       _gotFinalResult = false;
     });
 
     try {
-      // ignore: avoid_print
-      print('[VOICE-DEBUG] listen() starting, locale=${_lang.localeId}');
       await _speech.listen(
         onResult: _handleResult,
         localeId: _lang.localeId,
-        listenMode: ListenMode.confirmation,
+        listenMode: ListenMode.dictation,
         // No real timeout — bounded entirely by how long the button is
-        // held (onPointerUp calls stop()). These are generous ceilings
-        // so Android/iOS don't impose their own short default — though
-        // note Android still enforces its OWN internal speech-timeout
-        // independently of these values; that's handled via
-        // _handleError + _kRecoverableErrors instead, since it can't be
-        // configured away.
+        // held (onPointerUp decides when to actually stop). These are
+        // generous ceilings so Android/iOS don't impose their own short
+        // default — though Android still enforces its OWN internal
+        // speech-timeout independently of these values regardless; see
+        // _kRecoverableErrors for how that's absorbed.
         listenFor: const Duration(minutes: 2),
         pauseFor: const Duration(minutes: 2),
         cancelOnError: false,
@@ -779,47 +768,17 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     }
   }
 
-  /// HOLD-TO-TALK — release. THIS is the actual fix for single isolated
-  /// digits/words being missed — see "SINGLE-WORD RECOGNITION — release
-  /// grace delay" in the class-level doc comment for the full
-  /// explanation. Short version: calling stop() the instant the finger
-  /// lifts can cut the engine off before it finishes turning a short
-  /// utterance's partial result into a confident final one, which comes
-  /// back as an empty transcript. So instead of stopping immediately,
-  /// this waits a short grace window (350ms) first — UNLESS a new
-  /// partial result arrives during that window, in which case it stops
-  /// waiting immediately and proceeds to stop() right away, since a
-  /// fresh result means the engine already made the progress we were
-  /// waiting for. Either way _busy stays true for the whole window so
-  /// Skip/Confirm/mic can't race a stop() that hasn't happened yet.
+  /// HOLD-TO-TALK — release. See the class-level "SINGLE-WORD
+  /// RECOGNITION" doc comment for the full story: waits for an actual
+  /// final result (up to ~700ms) before calling stop() at all, since
+  /// calling stop() while the engine is still scoring a short utterance
+  /// was confirmed (via live device logs) to make it abandon that
+  /// recognition instead of finishing it.
   Future<void> _onPointerUp() async {
     if (!_isListening && !_warmingUp) return;
-    // ignore: avoid_print
-    print('[VOICE-DEBUG] onPointerUp: transcript="$_transcript"');
 
     setState(() => _busy = true);
     try {
-      // GRACE WAIT v2 — based on live debug logs, the previous 350ms
-      // wait-then-stop() approach was not the problem's actual shape.
-      // What the logs showed:
-      //   - For a single short word, stop() returns BEFORE the
-      //     engine's real onResult ever fires.
-      //   - The onResult that eventually arrives (after stop() has
-      //     already returned) comes back empty (confidence -1.0) —
-      //     i.e. calling stop() while the engine is mid-recognition
-      //     for a short utterance causes it to abandon/discard that
-      //     recognition rather than letting it finish.
-      // So waiting BEFORE calling stop() helps, but only if we wait
-      // long enough for the engine's real final result to land BEFORE
-      // stop() is ever invoked — not just "long enough that something,
-      // even an empty placeholder, came back." This now waits for an
-      // actual final result (_gotFinalResult flag, set in
-      // _handleResult) for up to 700ms, polling in short steps so a
-      // final result short-circuits the wait immediately. Only if NO
-      // final result shows up in that whole window do we fall back to
-      // calling stop() ourselves — at that point the engine is well
-      // past where a real short-word recognition would have landed,
-      // so there's nothing left to lose by stopping.
       _gotFinalResult = false;
       const graceWindow = Duration(milliseconds: 700);
       const pollStep = Duration(milliseconds: 40);
@@ -829,47 +788,14 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
         await Future.delayed(pollStep);
         waited += pollStep;
       }
-      // ignore: avoid_print
-      print('[VOICE-DEBUG] grace wait done, waited=${waited.inMilliseconds}ms '
-          'gotFinal=$_gotFinalResult transcript="$_transcript"');
 
       if (!_gotFinalResult) {
-        // ignore: avoid_print
-        print('[VOICE-DEBUG] no final result arrived — calling stop()');
         await _speech.stop();
-        // ignore: avoid_print
-        print('[VOICE-DEBUG] stop() returned, transcript="$_transcript"');
-
-        // POST-STOP SETTLE — the live debug log showed onResult/onStatus
-        // callbacks still arriving AFTER stop() had already returned
-        // (e.g. "stop() returned" followed later by onStatus: done and
-        // an onError). Clearing _busy immediately at that point lets a
-        // fast next press start a new listen() session while the
-        // previous one is still asynchronously tearing down — which is
-        // exactly what produced error_client / error_speech_timeout on
-        // the very next attempt in the log. This short delay gives
-        // those trailing callbacks room to land before the busy guard
-        // is released, so the next listen() doesn't collide with a
-        // session that technically hasn't finished shutting down yet.
+        // POST-STOP SETTLE — gives any trailing callbacks room to land
+        // before the busy guard is released, so the next listen()
+        // doesn't collide with a session that hasn't fully torn down
+        // yet (seen live as error_client when this wasn't here).
         await Future.delayed(const Duration(milliseconds: 200));
-      }
-
-      // SILENT-EMPTY-RESULT CASE: sometimes the engine produces no
-      // result at all for a very short isolated word — not an error,
-      // not even an empty final result callback, just nothing. Without
-      // this, the user has no idea anything went wrong: the box just
-      // keeps showing the generic "Hold the mic..." placeholder, which
-      // looks identical to "you never pressed the mic" rather than
-      // "you spoke and it wasn't caught". This surfaces that
-      // distinction with the same small inline hint _handleError uses
-      // for recoverable errors, so the user knows to just try again.
-      if (mounted && _transcript.trim().isEmpty) {
-        setState(() {
-          _retryHint = _t(
-            'Didn\'t catch that — try again, holding a beat longer',
-            'سمجھ نہیں آیا — دوبارہ کوشش کریں، ذرا دیر تک دبائیں',
-          );
-        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -877,64 +803,73 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   }
 
   void _handleResult(SpeechRecognitionResult result) {
-    // ignore: avoid_print
-    print('[VOICE-DEBUG] onResult: words="${result.recognizedWords}" '
-        'confidence=${result.confidence} final=${result.finalResult}');
     if (result.finalResult) {
       _gotFinalResult = true;
     }
     if (!mounted) return;
     setState(() {
       // Only overwrite the transcript with an empty final result if we
-      // didn't already have something better. A late, empty final
+      // didn't already have something better — a late, empty final
       // result landing after a good partial already arrived should not
-      // erase that partial — see the live debug log, where exactly this
-      // sequence (good partial, then empty final) is a real
-      // possibility once the engine is winding down.
+      // erase that partial.
       if (result.recognizedWords.trim().isNotEmpty || _transcript.isEmpty) {
         _transcript = result.recognizedWords;
       }
-      if (result.recognizedWords.trim().isNotEmpty) {
-        _resultRevision++;
-      }
     });
+    _applyTranscriptToField(result.recognizedWords);
   }
 
-  /// Confirms the current transcript as the value for the current field,
-  /// writes it into the controller, then advances to the next field.
-  void _confirm() {
-    if (_busy) return;
-    final raw = _transcript.trim();
-    if (raw.isEmpty) return;
+  /// Writes the live transcript straight into the current field's
+  /// controller (and, for warpBlend/ply, into the matching radio
+  /// selection) as results stream in — not just on Confirm. This is
+  /// what makes the field "fill live while speaking" rather than only
+  /// updating once at the end. The person can still type over any of
+  /// this by hand at any time; nothing here is a one-way lock.
+  void _applyTranscriptToField(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) return;
 
     final field = _currentField;
-    if (!field.isText) {
-      final value = _SpokenNumberParser.parse(raw, _lang);
-      if (value != null) {
-        widget.controllers[field.key]?.text = _formatForField(value);
-      }
-    } else {
-      widget.controllers[field.key]?.text = raw;
+    switch (field.kind) {
+      case _FieldKind.text:
+        _currentController.text = text;
+        break;
+      case _FieldKind.number:
+        final value = _SpokenNumberParser.parse(text, _lang);
+        if (value != null) {
+          _currentController.text = _formatForField(value);
+        }
+        break;
+      case _FieldKind.warpBlend:
+        final matched = _WarpBlendMatcher.match(text);
+        if (matched != null) {
+          setState(() => _currentController.text = matched);
+        }
+        break;
+      case _FieldKind.ply:
+        final value = _SpokenNumberParser.parse(text, _lang);
+        if (value != null) {
+          final asInt = value.round();
+          setState(() {
+            if (asInt == 1 || asInt == 2) {
+              _currentController.text = asInt.toString();
+            } else {
+              _currentController.text = 'other';
+              _plyOtherController.text = _formatForField(value);
+            }
+          });
+        }
+        break;
     }
-
-    _advance();
   }
 
-  /// Skips the current field (leaves its controller unchanged).
-  void _skip() {
-    if (_busy) return;
-    _advance();
-  }
-
-  /// Advances to the next field. Fully awaits stop() before allowing
-  /// the next field's listen() to be triggered — guarded by _busy the
-  /// same way press/release are, which is what prevents rapid
-  /// skip-skip-skip from leaving the engine in a desynced state.
+  /// Moves to the next field. Both Skip and Confirm do the same thing
+  /// now that every field is always live-editable — there's no
+  /// separate "commit" step, the controller already holds whatever was
+  /// spoken or typed. Confirm/Skip are purely sequence navigation.
   Future<void> _advance() async {
-    setState(() {
-      _busy = true;
-      _retryHint = null;
-    });
+    if (_busy) return;
+    setState(() => _busy = true);
     try {
       if (_isListening || _warmingUp) {
         await _speech.stop();
@@ -1027,16 +962,6 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
               const SizedBox(height: 12),
               Text(_t('All fields done!', 'تمام فیلڈز مکمل!'),
                   style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 6),
-              Text(
-                _t(
-                  'Warp Blend must be set manually from the dropdown.',
-                  'وارپ بلینڈ ڈراپ ڈاؤن سے خود سیٹ کرنا ہوگا۔',
-                ),
-                style: TextStyle(fontSize: 12,
-                    color: colorScheme.onSurfaceVariant),
-                textAlign: TextAlign.center,
-              ),
               const SizedBox(height: 20),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -1066,14 +991,16 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
               ),
               const SizedBox(height: 4),
               Text(
-                _currentField.isText
-                    ? _t('Hold the mic and say the text value', 'مائیک دبا کر متن بولیں')
-                    : _t('Hold the mic and say the number', 'مائیک دبا کر نمبر بولیں'),
+                _t('Hold the mic and speak, or type below', 'مائیک دبا کر بولیں، یا نیچے ٹائپ کریں'),
                 style: TextStyle(fontSize: 12,
                     color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
 
+              // Live transcript readout — purely informational, shows
+              // what voice most recently heard. The editable field
+              // below it (for text/number) or the radio group (for
+              // warpBlend/ply) is the actual source of truth.
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
@@ -1117,26 +1044,20 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
 
-              // Inline hint for routine recoverable errors (timeout /
-              // no-match / busy). Distinct from the fatal _initError
-              // screen above — this never blocks the modal, it just
-              // tells the user the last attempt didn't register and to
-              // try the mic again.
-              if (_retryHint != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.info_outline, size: 14, color: colorScheme.error),
-                    const SizedBox(width: 4),
-                    Text(
-                      _retryHint!,
-                      style: TextStyle(fontSize: 12, color: colorScheme.error),
-                    ),
-                  ],
-                ),
-              ],
+              // EVERY FIELD STAYS EDITABLE — the actual input for the
+              // current field. Text/number fields get a plain TextField
+              // bound to the controller; warpBlend/ply get a radio
+              // group. Either way this is the single source of truth
+              // the person can always tap into and correct by hand.
+              _FieldEditor(
+                field: _currentField,
+                controller: _currentController,
+                plyOtherController: _plyOtherController,
+                isUrdu: _isUrdu,
+                onChanged: () => setState(() {}),
+              ),
               const SizedBox(height: 24),
 
               Center(
@@ -1163,35 +1084,197 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _busy ? null : _skip,
+                      onPressed: _busy ? null : _advance,
                       child: Text(_t('Skip', 'چھوڑیں')),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton(
-                      onPressed: (_busy || _transcript.trim().isEmpty) ? null : _confirm,
-                      child: Text(_t('Confirm', 'تصدیق')),
+                      onPressed: _busy ? null : _advance,
+                      child: Text(_t('Next', 'آگے')),
                     ),
                   ),
                 ],
-              ),
-
-              const SizedBox(height: 12),
-              Text(
-                _t(
-                  'Note: Warp Blend is set from the dropdown, not by voice.',
-                  'نوٹ: وارپ بلینڈ ڈراپ ڈاؤن سے سیٹ ہوتا ہے، آواز سے نہیں۔',
-                ),
-                style: TextStyle(
-                    fontSize: 11, color: colorScheme.onSurfaceVariant),
-                textAlign: TextAlign.center,
               ),
             ],
           ],
         ),
       ),
     );
+  }
+}
+
+// =========================================================================
+// FIELD EDITOR — the always-editable input for the current field
+// =========================================================================
+
+class _FieldEditor extends StatelessWidget {
+  final _VoiceField field;
+  final TextEditingController controller;
+  final TextEditingController plyOtherController;
+  final bool isUrdu;
+  final VoidCallback onChanged;
+
+  const _FieldEditor({
+    required this.field,
+    required this.controller,
+    required this.plyOtherController,
+    required this.isUrdu,
+    required this.onChanged,
+  });
+
+  String _t(String en, String ur) => isUrdu ? ur : en;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    switch (field.kind) {
+      case _FieldKind.text:
+      case _FieldKind.number:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6, left: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.edit_outlined,
+                      size: 13, color: colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Text(
+                    _t('Or type here', 'یا یہاں ٹائپ کریں'),
+                    style: TextStyle(
+                        fontSize: 11, color: colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            TextField(
+              controller: controller,
+              keyboardType: field.kind == _FieldKind.number
+                  ? const TextInputType.numberWithOptions(decimal: true)
+                  : TextInputType.text,
+              textDirection: isUrdu ? TextDirection.rtl : TextDirection.ltr,
+              style: const TextStyle(fontSize: 16),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: colorScheme.surfaceContainerLow,
+                contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                hintText: _t('Type or speak the value', 'ٹائپ کریں یا بولیں'),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: colorScheme.outlineVariant, width: 0.5),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+                ),
+              ),
+              onChanged: (_) => onChanged(),
+            ),
+          ],
+        );
+
+      case _FieldKind.warpBlend:
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: kWarpBlendOptions.map((option) {
+            final selected = controller.text == option;
+            return ChoiceChip(
+              label: Text(option),
+              selected: selected,
+              onSelected: (_) {
+                controller.text = option;
+                onChanged();
+              },
+            );
+          }).toList(),
+        );
+
+      case _FieldKind.ply:
+        final current = controller.text;
+        final isOther = current != '1' && current != '2';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('1'),
+                  selected: current == '1',
+                  onSelected: (_) {
+                    controller.text = '1';
+                    onChanged();
+                  },
+                ),
+                ChoiceChip(
+                  label: const Text('2'),
+                  selected: current == '2',
+                  onSelected: (_) {
+                    controller.text = '2';
+                    onChanged();
+                  },
+                ),
+                ChoiceChip(
+                  label: Text(_t('Other', 'دیگر')),
+                  selected: isOther && current.isNotEmpty,
+                  onSelected: (_) {
+                    controller.text = plyOtherController.text.isEmpty
+                        ? 'other'
+                        : plyOtherController.text;
+                    onChanged();
+                  },
+                ),
+              ],
+            ),
+            if (isOther) ...[
+              const SizedBox(height: 10),
+              TextField(
+                controller: plyOtherController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(fontSize: 16),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
+                  contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  hintText: _t('Enter Ply value', 'پلائی کی ویلیو درج کریں'),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant, width: 0.5),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant, width: 0.5),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide:
+                    BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
+                  ),
+                ),
+                onChanged: (value) {
+                  controller.text = value;
+                  onChanged();
+                },
+              ),
+            ],
+          ],
+        );
+    }
   }
 }
 
