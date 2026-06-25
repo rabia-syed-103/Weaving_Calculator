@@ -112,7 +112,14 @@ import '../widgets/share_action_button.dart';
 import '../widgets/voice_input_modal.dart';
 import 'main_nav_shell.dart';
 
-const List<String> kWarpBlendOptions = ['Ctn', 'Pc', 'Pv', 'Pp', 'Cvc', 'Viscose'];
+const List<String> kWarpBlendOptions = [
+  'Cotton',
+  'Pv',
+  'Pc',
+  'Cvc',
+  'Pp',
+  'Viscose',
+];
 
 class InputScreen extends StatefulWidget {
   const InputScreen({super.key});
@@ -235,8 +242,15 @@ class _InputScreenState extends State<InputScreen> {
       // doesn't have a match (incomplete fields, or no matching Sizing
       // Rate row) — at that point _maybeUpdateSizingCost() simply does
       // nothing, leaving whatever's already in the field untouched.
-      if (entry.key == 'warpCount' || entry.key == 'ply') {
+      if (entry.key == 'warpCount') {
         entry.value.addListener(_maybeUpdateSizingCost);
+      }
+
+      if (entry.key == 'ply') {
+        entry.value.addListener(() {
+          setState(() {}); // rebuild to show/hide "Other" text field
+          _maybeUpdateSizingCost();
+        });
       }
     }
 
@@ -767,29 +781,22 @@ class _InputScreenState extends State<InputScreen> {
                   style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 2),
-                DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _warpBlend,
-                    isDense: true,
-                    isExpanded: true,
-                    hint: Text(
-                      'Select',
-                      style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
-                    ),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: colorScheme.onSurface,
-                    ),
-                    items: kWarpBlendOptions
-                        .map((b) => DropdownMenuItem(value: b, child: Text(b)))
-                        .toList(),
-                    onChanged: (value) {
-                      _warpBlend = value;
-                      _maybeUpdateSizingCost();
-                      _recalculate();
-                    },
-                  ),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: kWarpBlendOptions.map((option) {
+                    return ChoiceChip(
+                      label: Text(option),
+                      selected: _warpBlend == option,
+                      onSelected: (_) {
+                        setState(() {
+                          _warpBlend = option;
+                        });
+                        _maybeUpdateSizingCost();
+                        _recalculate();
+                      },
+                    );
+                  }).toList(),
                 ),
               ],
             ),
@@ -797,10 +804,92 @@ class _InputScreenState extends State<InputScreen> {
         ),
         SizedBox(
           width: halfWidth,
-          child: InputFieldCard(
-            label: 'Ply',
-            controller: _controllers['ply']!,
-            type: FieldType.number,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: colorScheme.outlineVariant,
+                width: 0.5,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ply',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('1'),
+                      selected: _controllers['ply']!.text == '1',
+                      onSelected: (_) {
+                        setState(() {
+                          _controllers['ply']!.text = '1';
+                        });
+                        _maybeUpdateSizingCost();
+                        _recalculate();
+                      },
+                    ),
+
+                    ChoiceChip(
+                      label: const Text('2'),
+                      selected: _controllers['ply']!.text == '2',
+                      onSelected: (_) {
+                        setState(() {
+                          _controllers['ply']!.text = '2';
+                        });
+                        _maybeUpdateSizingCost();
+                        _recalculate();
+                      },
+                    ),
+
+                    ChoiceChip(
+                      label: const Text('Other'),
+                      selected: _controllers['ply']!.text != '1' &&
+                          _controllers['ply']!.text != '2',
+                      onSelected: (_) {
+                        setState(() {
+                          if (_controllers['ply']!.text == '1' ||
+                              _controllers['ply']!.text == '2') {
+                            _controllers['ply']!.clear();
+                          }
+                        });
+                      },
+                    ),
+                  ],
+                ),
+
+                if (_controllers['ply']!.text != '1' &&
+                    _controllers['ply']!.text != '2') ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _controllers['ply'],
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'Enter ply',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) {
+                      _maybeUpdateSizingCost();
+                      _recalculate();
+                    },
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ],
