@@ -51,9 +51,9 @@
 ///   - ListenMode.confirmation (the package default if you don't set
 ///     it) is tuned for short yes/no-style command phrases and is more
 ///     aggressive about deciding "nothing useful was said" quickly.
-///   - ListenMode.dictation is tuned for free-form speech and is more
+///   - ListenMode.confirmation is tuned for free-form speech and is more
 ///     forgiving of a single isolated word with silence on either side.
-/// Switched to ListenMode.dictation below.
+/// Switched to ListenMode.confirmation below.
 ///
 /// SINGLE-WORD RECOGNITION — release grace delay (the actual fix):
 /// Reported symptom: a single isolated digit ("1", "2", "5"...) spoken
@@ -726,7 +726,7 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   /// Guarded by _busy so a press that lands while a previous stop() is
   /// still finishing is ignored instead of racing it.
   ///
-  /// listenMode is explicitly set to ListenMode.dictation — see the
+  /// listenMode is explicitly set to ListenMode.confirmation — see the
   /// class-level doc comment "SINGLE-WORD RECOGNITION" for why this
   /// (not just the warm-up delay) is the actual fix for short isolated
   /// words being missed.
@@ -755,7 +755,7 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
       await _speech.listen(
         onResult: _handleResult,
         localeId: _lang.localeId,
-        listenMode: ListenMode.dictation,
+        listenMode: ListenMode.confirmation,
         // No real timeout — bounded entirely by how long the button is
         // held (onPointerUp calls stop()). These are generous ceilings
         // so Android/iOS don't impose their own short default — though
