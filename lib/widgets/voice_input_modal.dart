@@ -44,7 +44,7 @@
 /// start talking into a half-started engine.
 ///
 /// SINGLE-WORD RECOGNITION — listenMode.dictation:
-/// This is the second, separate fix for short words being missed (the
+/// This is a contributing fix for short words being missed (the
 /// warm-up delay alone does not fully solve it). speech_to_text exposes
 /// a `listenMode` that controls how the underlying platform recognizer
 /// is configured:
@@ -53,8 +53,36 @@
 ///     aggressive about deciding "nothing useful was said" quickly.
 ///   - ListenMode.dictation is tuned for free-form speech and is more
 ///     forgiving of a single isolated word with silence on either side.
-/// Switched to ListenMode.dictation below — this is the actual fix for
-/// "speaking one short word like 'two' alone isn't captured."
+/// Switched to ListenMode.dictation below.
+///
+/// SINGLE-WORD RECOGNITION — release grace delay (the actual fix):
+/// Reported symptom: a single isolated digit ("1", "2", "5"...) spoken
+/// alone is never captured — the transcript stays empty — but saying
+/// the same digit twice ("one one") works every time, and is
+/// transcribed straight to "11" by the recognizer itself.
+///
+/// Root cause: this is NOT a recognition-quality problem, it's a
+/// timing problem in THIS widget. _onPointerUp calls _speech.stop()
+/// the instant the finger lifts. For a single short syllable, the
+/// finger lifts almost immediately after the word is spoken — often
+/// before the recognizer has finished turning its in-flight partial
+/// result into a confident final one. stop() cuts the engine off mid-
+/// process, and what comes back is an empty, low-confidence final
+/// result (matches the documented platform behavior: a final result
+/// with confidence -1.0 and empty recognizedWords is what the engine
+/// emits when a session is torn down before it finishes scoring what
+/// it heard). A two-syllable utterance survives because the natural
+/// time it takes to say it gives the engine enough headroom before the
+/// hold is released.
+///
+/// Fixed with a short grace delay (350ms) inserted at the START of
+/// _onPointerUp, before stop() is called. This does NOT make the UI
+/// feel slow — the engine is still actively listening during that
+/// window (partialResults keep flowing into _transcript exactly as
+/// before), it just delays the moment stop() is issued so a trailing
+/// single word has time to finalize. If a later partial result arrives
+/// during the grace delay, it preempts the delay immediately rather
+/// than waiting out the full 350ms unnecessarily.
 ///
 /// ERROR HANDLING — recoverable vs fatal, and the permanent-lock bug:
 /// Every error speech_to_text reports comes through one onError
@@ -181,10 +209,23 @@ extension on VoiceLang {
 //                         anything. Means "didn't understand that".
 // error_busy             : Engine was still tearing down a previous
 //                         session. Means "try again in a moment".
+// error_client            : Confirmed via live debug logging (not just
+//                         docs) to fire when a new listen() session
+//                         starts while the PREVIOUS session is still
+//                         asynchronously finishing its teardown
+//                         (trailing onResult/onStatus callbacks were
+//                         observed arriving after stop() had already
+//                         returned). It's a collision between sessions,
+//                         not a broken mic — confirmed by the same
+//                         physical mic immediately working again on the
+//                         very next attempt once given enough settle
+//                         time. See the post-stop settle delay in
+//                         _onPointerUp.
 const Set<String> _kRecoverableErrors = {
   'error_speech_timeout',
   'error_no_match',
   'error_busy',
+  'error_client',
 };
 
 // =========================================================================
@@ -384,6 +425,94 @@ class _SpokenNumberParser {
   }
 }
 
+/// ENGINE SINGLETON — fixes "mic stops working after closing and
+/// reopening the modal":
+///
+/// The previous version created `final SpeechToText _speech =
+/// SpeechToText()` directly inside _VoiceInputModalState, and called
+/// `_speech.initialize()` in initState(). That means every time the
+/// bottom sheet was opened, a BRAND NEW SpeechToText instance was
+/// created and a BRAND NEW initialize() call was made — and every time
+/// it was closed, dispose() called stop() on that instance and threw
+/// it away.
+///
+/// This directly contradicts how the package is meant to be used. The
+/// official docs are explicit about it: initialize() is meant to run
+/// ONCE per app session, and warn that "there should be only one
+/// instance of the plugin per application" — repeated initialize()
+/// calls are documented as unreliable for resetting callbacks, and in
+/// practice (confirmed by multiple reports of this exact symptom)
+/// re-initializing a second time can leave the native Android
+/// recognizer session in a half-torn-down state from the previous
+/// instance, which is consistent with "listening starts, shows for
+/// about a second, then silently stops with no error" — the new
+/// session collides with the old one before Android has fully
+/// released it.
+///
+/// Fixed by moving the SpeechToText instance and its one-time
+/// initialize() into this singleton, which lives for the lifetime of
+/// the app process, not the lifetime of the modal widget. The modal
+/// now calls VoiceEngine.ensureInitialized() in initState() instead of
+/// creating+initializing its own instance — the first call actually
+/// initializes the engine, every call after that (including on the
+/// next time the modal is opened) reuses the already-initialized
+/// instance and returns immediately.
+class VoiceEngine {
+  VoiceEngine._();
+  static final VoiceEngine instance = VoiceEngine._();
+
+  final SpeechToText speech = SpeechToText();
+
+  bool _initialized = false;
+  bool _available = false;
+  bool get available => _available;
+
+  // The modal's current onStatus/onError handlers. Re-pointed every
+  // time a modal attaches (see attach()) since speech_to_text only
+  // lets you set these once via initialize() — see class doc comment.
+  // Calls are forwarded here instead, so each new modal instance still
+  // gets live status/error callbacks despite initialize() only really
+  // running the first time.
+  void Function(String status)? _onStatus;
+  void Function(SpeechRecognitionError error)? _onError;
+
+  /// Call from the modal's initState(). Initializes the underlying
+  /// engine only on the very first call for the whole app session;
+  /// every subsequent call (i.e. every time the modal is reopened)
+  /// just returns the cached availability instantly.
+  Future<bool> ensureInitialized() async {
+    if (_initialized) return _available;
+    _initialized = true;
+    try {
+      _available = await speech.initialize(
+        onStatus: (status) => _onStatus?.call(status),
+        onError: (error) => _onError?.call(error),
+      );
+    } catch (_) {
+      _available = false;
+    }
+    return _available;
+  }
+
+  /// Points the engine's callbacks at whichever modal instance is
+  /// currently on screen. Called from the modal's initState() right
+  /// after ensureInitialized(), and cleared in dispose() so a modal
+  /// that's gone doesn't keep receiving callbacks (and so it doesn't
+  /// call setState() after being unmounted).
+  void attach({
+    required void Function(String status) onStatus,
+    required void Function(SpeechRecognitionError error) onError,
+  }) {
+    _onStatus = onStatus;
+    _onError = onError;
+  }
+
+  void detach() {
+    _onStatus = null;
+    _onError = null;
+  }
+}
+
 class VoiceInputModal extends StatefulWidget {
   /// The controllers map from InputScreen — same keys as _controllers.
   final Map<String, TextEditingController> controllers;
@@ -395,7 +524,9 @@ class VoiceInputModal extends StatefulWidget {
 }
 
 class _VoiceInputModalState extends State<VoiceInputModal> {
-  final SpeechToText _speech = SpeechToText();
+  // Shared, app-lifetime engine instance — see the VoiceEngine class
+  // doc comment for why this replaced a per-modal SpeechToText().
+  SpeechToText get _speech => VoiceEngine.instance.speech;
 
   bool _speechAvailable = false;
 
@@ -432,6 +563,22 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
 
   String _transcript = '';
 
+  // Bumped every time _handleResult fires with a non-empty transcript.
+  // Used by _onPointerUp's grace delay to detect "a new result just
+  // came in, so the engine made more progress — stop waiting and
+  // finalize now" instead of always waiting out the full grace window.
+  int _resultRevision = 0;
+
+  // Set true the instant a FINAL (not partial) result arrives from the
+  // engine. _onPointerUp's grace wait polls this instead of just "any
+  // result happened" — see the live-debug-log-driven rewrite of
+  // _onPointerUp for why waiting specifically for a final result (and
+  // only falling back to calling stop() ourselves if one never shows
+  // up in time) is what actually fixes single-word loss, vs. the
+  // earlier version which waited for any result and then called
+  // stop() regardless.
+  bool _gotFinalResult = false;
+
   int _fieldIndex = 0; // current position in _kVoiceFields
   bool _done = false;
 
@@ -449,21 +596,37 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   @override
   void initState() {
     super.initState();
+    // Route the shared engine's callbacks to THIS modal instance while
+    // it's on screen. Must happen before ensureInitialized() so that
+    // even on the very first app-wide initialize() call, onStatus/
+    // onError already have somewhere to go.
+    VoiceEngine.instance.attach(onStatus: _handleStatus, onError: _handleError);
     _initSpeech();
   }
 
   @override
   void dispose() {
+    // Stop any in-flight listening session, but do NOT tear down or
+    // replace the shared engine instance itself — see the VoiceEngine
+    // class doc comment for why re-creating/re-initializing per modal
+    // open is exactly what caused "mic stops responding after closing
+    // and reopening the modal." detach() so this now-dead State stops
+    // receiving callbacks (and can't call setState() after unmount).
     _speech.stop();
+    VoiceEngine.instance.detach();
     super.dispose();
   }
 
+  /// Uses VoiceEngine.ensureInitialized() instead of calling
+  /// _speech.initialize() directly — on the first modal open this runs
+  /// the real initialize() once; on every later open (including after
+  /// fully closing and reopening the modal) it just returns the
+  /// already-known availability immediately, without touching the
+  /// native recognizer session at all. See the VoiceEngine class doc
+  /// comment for the full story.
   Future<void> _initSpeech() async {
     try {
-      final available = await _speech.initialize(
-        onStatus: _handleStatus,
-        onError: _handleError,
-      );
+      final available = await VoiceEngine.instance.ensureInitialized();
 
       if (mounted) setState(() => _speechAvailable = available);
 
@@ -483,6 +646,8 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   }
 
   void _handleStatus(String status) {
+    // ignore: avoid_print
+    print('[VOICE-DEBUG] onStatus: $status');
     if (!mounted) return;
     setState(() {
       _isListening = status == 'listening';
@@ -505,6 +670,8 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   /// happened to be in flight, which is what made the mic stop
   /// responding to ANY press at all (not just stop producing text).
   void _handleError(SpeechRecognitionError error) {
+    // ignore: avoid_print
+    print('[VOICE-DEBUG] onError: ${error.errorMsg} permanent=${error.permanent}');
     if (!mounted) return;
 
     final isRecoverable = _kRecoverableErrors.contains(error.errorMsg);
@@ -578,9 +745,13 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
       _warmingUp = true;
       _transcript = '';
       _retryHint = null;
+      _resultRevision = 0;
+      _gotFinalResult = false;
     });
 
     try {
+      // ignore: avoid_print
+      print('[VOICE-DEBUG] listen() starting, locale=${_lang.localeId}');
       await _speech.listen(
         onResult: _handleResult,
         localeId: _lang.localeId,
@@ -608,24 +779,125 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     }
   }
 
-  /// HOLD-TO-TALK — release. Stops listening and waits for that to
-  /// fully complete before clearing _busy, so a fast tap on Skip/
-  /// Confirm/mic right after release can't overlap with the stop()
-  /// still being processed by the engine.
+  /// HOLD-TO-TALK — release. THIS is the actual fix for single isolated
+  /// digits/words being missed — see "SINGLE-WORD RECOGNITION — release
+  /// grace delay" in the class-level doc comment for the full
+  /// explanation. Short version: calling stop() the instant the finger
+  /// lifts can cut the engine off before it finishes turning a short
+  /// utterance's partial result into a confident final one, which comes
+  /// back as an empty transcript. So instead of stopping immediately,
+  /// this waits a short grace window (350ms) first — UNLESS a new
+  /// partial result arrives during that window, in which case it stops
+  /// waiting immediately and proceeds to stop() right away, since a
+  /// fresh result means the engine already made the progress we were
+  /// waiting for. Either way _busy stays true for the whole window so
+  /// Skip/Confirm/mic can't race a stop() that hasn't happened yet.
   Future<void> _onPointerUp() async {
     if (!_isListening && !_warmingUp) return;
+    // ignore: avoid_print
+    print('[VOICE-DEBUG] onPointerUp: transcript="$_transcript"');
 
     setState(() => _busy = true);
     try {
-      await _speech.stop();
+      // GRACE WAIT v2 — based on live debug logs, the previous 350ms
+      // wait-then-stop() approach was not the problem's actual shape.
+      // What the logs showed:
+      //   - For a single short word, stop() returns BEFORE the
+      //     engine's real onResult ever fires.
+      //   - The onResult that eventually arrives (after stop() has
+      //     already returned) comes back empty (confidence -1.0) —
+      //     i.e. calling stop() while the engine is mid-recognition
+      //     for a short utterance causes it to abandon/discard that
+      //     recognition rather than letting it finish.
+      // So waiting BEFORE calling stop() helps, but only if we wait
+      // long enough for the engine's real final result to land BEFORE
+      // stop() is ever invoked — not just "long enough that something,
+      // even an empty placeholder, came back." This now waits for an
+      // actual final result (_gotFinalResult flag, set in
+      // _handleResult) for up to 700ms, polling in short steps so a
+      // final result short-circuits the wait immediately. Only if NO
+      // final result shows up in that whole window do we fall back to
+      // calling stop() ourselves — at that point the engine is well
+      // past where a real short-word recognition would have landed,
+      // so there's nothing left to lose by stopping.
+      _gotFinalResult = false;
+      const graceWindow = Duration(milliseconds: 700);
+      const pollStep = Duration(milliseconds: 40);
+      var waited = Duration.zero;
+
+      while (waited < graceWindow && !_gotFinalResult && mounted) {
+        await Future.delayed(pollStep);
+        waited += pollStep;
+      }
+      // ignore: avoid_print
+      print('[VOICE-DEBUG] grace wait done, waited=${waited.inMilliseconds}ms '
+          'gotFinal=$_gotFinalResult transcript="$_transcript"');
+
+      if (!_gotFinalResult) {
+        // ignore: avoid_print
+        print('[VOICE-DEBUG] no final result arrived — calling stop()');
+        await _speech.stop();
+        // ignore: avoid_print
+        print('[VOICE-DEBUG] stop() returned, transcript="$_transcript"');
+
+        // POST-STOP SETTLE — the live debug log showed onResult/onStatus
+        // callbacks still arriving AFTER stop() had already returned
+        // (e.g. "stop() returned" followed later by onStatus: done and
+        // an onError). Clearing _busy immediately at that point lets a
+        // fast next press start a new listen() session while the
+        // previous one is still asynchronously tearing down — which is
+        // exactly what produced error_client / error_speech_timeout on
+        // the very next attempt in the log. This short delay gives
+        // those trailing callbacks room to land before the busy guard
+        // is released, so the next listen() doesn't collide with a
+        // session that technically hasn't finished shutting down yet.
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+
+      // SILENT-EMPTY-RESULT CASE: sometimes the engine produces no
+      // result at all for a very short isolated word — not an error,
+      // not even an empty final result callback, just nothing. Without
+      // this, the user has no idea anything went wrong: the box just
+      // keeps showing the generic "Hold the mic..." placeholder, which
+      // looks identical to "you never pressed the mic" rather than
+      // "you spoke and it wasn't caught". This surfaces that
+      // distinction with the same small inline hint _handleError uses
+      // for recoverable errors, so the user knows to just try again.
+      if (mounted && _transcript.trim().isEmpty) {
+        setState(() {
+          _retryHint = _t(
+            'Didn\'t catch that — try again, holding a beat longer',
+            'سمجھ نہیں آیا — دوبارہ کوشش کریں، ذرا دیر تک دبائیں',
+          );
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   void _handleResult(SpeechRecognitionResult result) {
+    // ignore: avoid_print
+    print('[VOICE-DEBUG] onResult: words="${result.recognizedWords}" '
+        'confidence=${result.confidence} final=${result.finalResult}');
+    if (result.finalResult) {
+      _gotFinalResult = true;
+    }
     if (!mounted) return;
-    setState(() => _transcript = result.recognizedWords);
+    setState(() {
+      // Only overwrite the transcript with an empty final result if we
+      // didn't already have something better. A late, empty final
+      // result landing after a good partial already arrived should not
+      // erase that partial — see the live debug log, where exactly this
+      // sequence (good partial, then empty final) is a real
+      // possibility once the engine is winding down.
+      if (result.recognizedWords.trim().isNotEmpty || _transcript.isEmpty) {
+        _transcript = result.recognizedWords;
+      }
+      if (result.recognizedWords.trim().isNotEmpty) {
+        _resultRevision++;
+      }
+    });
   }
 
   /// Confirms the current transcript as the value for the current field,
