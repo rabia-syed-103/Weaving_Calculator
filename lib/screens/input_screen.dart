@@ -111,9 +111,7 @@ import '../widgets/input_field_card.dart';
 import '../widgets/share_action_button.dart';
 import '../widgets/voice_input_modal.dart';
 import 'main_nav_shell.dart';
-
-const List<String> kWarpBlendOptions = ['Ctn', 'Pc', 'Pv', 'Pp', 'Cvc', 'Viscose'];
-
+import '../widgets/warp_blend_options.dart';
 class InputScreen extends StatefulWidget {
   const InputScreen({super.key});
 
@@ -394,7 +392,17 @@ class _InputScreenState extends State<InputScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => VoiceInputModal(controllers: _controllers),
+      builder: (context) => VoiceInputModal(
+        controllers: _controllers,
+        warpBlendValue: _warpBlend,
+        onWarpBlendChanged: (value) {
+          setState(() {
+            _warpBlend = value;
+          });
+          _maybeUpdateSizingCost();
+          _recalculate();
+        },
+      ),
     );
     if (!mounted) return;
     _maybeUpdateSizingCost();
