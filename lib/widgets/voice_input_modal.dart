@@ -158,6 +158,7 @@ import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
+import 'warp_blend_options.dart';
 
 // =========================================================================
 // FIELD MODEL
@@ -205,26 +206,34 @@ extension on VoiceLang {
 // =========================================================================
 // WARP BLEND — fixed option set, identical labels in both languages
 // =========================================================================
-
-/// The six Warp Blend codes, in display order. Same labels regardless
-/// of _lang — these are industry abbreviations, not translated words.
-const List<String> kWarpBlendOptions = ['Cotton', 'Pv', 'Pc', 'Cvc', 'Pp', 'Viscose'];
-
+//
+// IMPORTANT: this does NOT redeclare its own option list. The
+// authoritative list is `kWarpBlendOptions` in warp_blend_options.dart
+// (currently ['Ctn', 'Pc', 'Pv', 'Pp', 'Cvc', 'Viscose']), imported by
+// BOTH this file and input_screen.dart. Reusing that single shared
+// import instead of two separate local lists is required, not just
+// tidier — two lists with different spellings (an earlier draft of
+// this file used 'Cotton' instead of 'Ctn') is exactly what caused the
+// modal to write a value the InputScreen dropdown's `items` list
+// didn't recognize, which throws at runtime (DropdownButton requires
+// `value` to either be null or exactly match one of its `items`).
 class _WarpBlendMatcher {
-  // Each option maps to a set of spoken forms (including the common
-  // "spell it out" alternative, e.g. "Ctn" for Cotton) that should all
-  // resolve to that option being auto-selected on confirm.
+  // Each option maps to a set of spoken forms (including common spoken/
+  // spelled-out variants) that should resolve to that option being
+  // auto-selected on confirm. Keys here MUST exactly match the strings
+  // in warp_blend_options.dart's kWarpBlendOptions — see the class doc
+  // comment above for why a mismatch breaks the dropdown.
   static const Map<String, List<String>> _aliases = {
-    'Cotton': ['cotton', 'ctn', 'کاٹن'],
-    'Pv': ['pv', 'پی وی'],
+    'Ctn': ['cotton', 'ctn', 'سی ٹی این', 'کاٹن'],
     'Pc': ['pc', 'پی سی'],
-    'Cvc': ['cvc', 'سی وی سی'],
+    'Pv': ['pv', 'پی وی'],
     'Pp': ['pp', 'پی پی'],
+    'Cvc': ['cvc', 'سی وی سی'],
     'Viscose': ['viscose', 'وسکوز'],
   };
 
-  /// Returns the matching option from kWarpBlendOptions, or null if the
-  /// transcript doesn't confidently match any of them.
+  /// Returns the matching option (one of kWarpBlendOptions' values), or
+  /// null if the transcript doesn't confidently match any of them.
   static String? match(String raw) {
     final cleaned = raw.toLowerCase().trim();
     if (cleaned.isEmpty) return null;
@@ -535,13 +544,40 @@ class VoiceEngine {
 
 class VoiceInputModal extends StatefulWidget {
   /// The controllers map from InputScreen — same keys as _controllers.
-  /// Must contain entries for at least the 15 keys in _kVoiceFields
-  /// (warpBlend and ply included, even though those are presented as
-  /// radio groups rather than free text — their controller still holds
-  /// the resulting string value, exactly like every other field).
+  /// Covers every voice field EXCEPT warpBlend — see warpBlendValue/
+  /// onWarpBlendChanged below for why that one's handled separately.
   final Map<String, TextEditingController> controllers;
 
-  const VoiceInputModal({super.key, required this.controllers});
+  /// InputScreen's Warp Blend is a plain `String? _warpBlend` state
+  /// field, NOT a TextEditingController (it backs a DropdownButton,
+  /// which manages its own value rather than reading/writing a
+  /// controller). Earlier versions of this modal assumed every field
+  /// — including warpBlend — lived in the controllers map, which meant
+  /// selecting a Warp Blend chip in the modal wrote into a throwaway
+  /// controller that InputScreen never looked at: the chip highlighted
+  /// correctly inside the modal, but the value never reached the real
+  /// form (and the dropdown back on InputScreen stayed unset).
+  ///
+  /// Fixed by passing Warp Blend in and out through a plain value +
+  /// callback instead, exactly mirroring how the DropdownButton itself
+  /// talks to InputScreen's state:
+  ///   warpBlendValue      — the CURRENT _warpBlend value (so the modal
+  ///                         can show the correct chip as selected if
+  ///                         it's reopened after already being set).
+  ///   onWarpBlendChanged  — called the instant voice matches a blend
+  ///                         or the user taps a chip; the same callback
+  ///                         signature as DropdownButton.onChanged, so
+  ///                         InputScreen can pass its existing
+  ///                         onChanged handler straight through.
+  final String? warpBlendValue;
+  final ValueChanged<String?> onWarpBlendChanged;
+
+  const VoiceInputModal({
+    super.key,
+    required this.controllers,
+    required this.warpBlendValue,
+    required this.onWarpBlendChanged,
+  });
 
   @override
   State<VoiceInputModal> createState() => _VoiceInputModalState();
@@ -603,6 +639,23 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   // something stable to bind to even while "1" or "2" is selected.
   final TextEditingController _plyOtherController = TextEditingController();
 
+  // PROXY CONTROLLER for Warp Blend. InputScreen's Warp Blend is a
+  // plain `String? _warpBlend` field + callback (it backs a
+  // DropdownButton, not a TextEditingController) — see the
+  // VoiceInputModal class doc comment "warpBlendValue/
+  // onWarpBlendChanged" for the full explanation. Every other field in
+  // this modal (_FieldEditor, _applyTranscriptToField, etc.) is written
+  // generically against "the current field's controller", so rather
+  // than special-casing warpBlend through all of that code, this proxy
+  // controller stands in for it: seeded from widget.warpBlendValue,
+  // and any change to it (from a chip tap or a voice match) is
+  // forwarded straight to widget.onWarpBlendChanged via the listener
+  // added in initState(). _currentController below returns this proxy
+  // whenever the current field is warpBlend, and the real per-field
+  // controller from widget.controllers for every other field.
+  late final TextEditingController _warpBlendProxyController =
+  TextEditingController(text: widget.warpBlendValue ?? '');
+
   _VoiceField get _currentField => _kVoiceFields[_fieldIndex];
 
   bool get _isUrdu => _lang == VoiceLang.urdu;
@@ -610,9 +663,13 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   String get _fieldLabel =>
       _isUrdu ? _currentField.labelUr : _currentField.labelEn;
 
-  TextEditingController get _currentController =>
-      widget.controllers[_currentField.key] ??
-          (widget.controllers[_currentField.key] = TextEditingController());
+  TextEditingController get _currentController {
+    if (_currentField.kind == _FieldKind.warpBlend) {
+      return _warpBlendProxyController;
+    }
+    return widget.controllers[_currentField.key] ??
+        (widget.controllers[_currentField.key] = TextEditingController());
+  }
 
   @override
   void initState() {
@@ -623,6 +680,15 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     // onError already have somewhere to go.
     VoiceEngine.instance.attach(onStatus: _handleStatus, onError: _handleError);
     _initSpeech();
+
+    // Forward every change on the Warp Blend proxy controller straight
+    // to InputScreen's real onChanged handler — this is what actually
+    // gets the value out of the modal and into _warpBlend, fixing the
+    // "chip highlights but the form never sees it" bug.
+    _warpBlendProxyController.addListener(() {
+      final value = _warpBlendProxyController.text;
+      widget.onWarpBlendChanged(value.isEmpty ? null : value);
+    });
 
     // Seed the Ply "Other" text field from whatever the controller
     // already holds, in case the modal is reopened with Ply already
@@ -641,6 +707,7 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     _speech.stop();
     VoiceEngine.instance.detach();
     _plyOtherController.dispose();
+    _warpBlendProxyController.dispose();
     super.dispose();
   }
 
