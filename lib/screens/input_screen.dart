@@ -663,12 +663,24 @@ class _InputScreenState extends State<InputScreen> {
         ),
         title: Row(
           children: [
-            Image.asset(
-              'assets/images/sadeedtex_logo.png',
-              width: 32,
-              height: 32,
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(7),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                'TT',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onPrimary,
+                ),
+              ),
             ),
-            const Text('SadeedTex', style: TextStyle(fontSize: 16)),
+            const Text('TrendTex', style: TextStyle(fontSize: 16)),
           ],
         ),
         actions: const [ShareActionButton()],

@@ -116,14 +116,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             child: Column(
               children: [
-                Image.asset(
-                  'assets/images/sadeedtex_logo.png',
+                Container(
                   width: 52,
                   height: 52,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onPrimary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'TT',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.primary,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'SadeedTex',
+                  'TrendTex',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,

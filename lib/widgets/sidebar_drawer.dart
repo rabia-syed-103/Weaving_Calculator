@@ -56,17 +56,29 @@ class SidebarDrawer extends StatelessWidget {
               color: colorScheme.primary,
               child: Row(
                 children: [
-                  Image.asset(
-                    'assets/images/sadeedtex_logo.png',
+                  Container(
                     width: 32,
                     height: 32,
+                    decoration: BoxDecoration(
+                      color: colorScheme.onPrimary.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      'TT',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onPrimary,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'SadeedTex',
+                        'TrendTex',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
