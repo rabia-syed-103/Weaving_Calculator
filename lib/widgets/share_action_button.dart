@@ -1,6 +1,6 @@
 /// share_action_button.dart
 /// -----------------------------------------------------------------------
-/// The share icon that sits in every screen's AppBar (next to "SadeedTex"
+/// The share icon that sits in every screen's AppBar (next to "TrendTex"
 /// title / actions), per direct instruction. Reads the latest calculation
 /// from CostingProvider — if nothing has been calculated yet, the button
 /// is disabled (greyed out) rather than crashing or sharing empty/zero

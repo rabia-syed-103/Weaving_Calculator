@@ -37,9 +37,9 @@ class ShareService {
 
     await Share.shareXFiles(
       [XFile(xlsxPath), XFile(pdfPath)],
-      text: 'SadeedTex Fabric Costing — Grey Fabric Rate: '
+      text: 'TrendTex Fabric Costing — Grey Fabric Rate: '
           '${entry.output.greyFabricRate.toStringAsFixed(2)} PKR/mtr',
-      subject: 'SadeedTex Costing Sheet',
+      subject: 'TrendTex Costing Sheet',
     );
   }
 }

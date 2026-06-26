@@ -5,7 +5,7 @@
 /// PDF layout — suitable for WhatsApp, email, or printing.
 ///
 /// Layout:
-///   - Header: SadeedTex branding + fabric spec title + date
+///   - Header: TrendTex branding + fabric spec title + date
 ///   - Section 1: Fabric Inputs (all Section A fields)
 ///   - Section 2: Fabric Cost outputs
 ///   - Section 3: Yarn Weight outputs
@@ -100,7 +100,7 @@ class PdfExportService {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    'SadeedTex — Fabric Costing Sheet',
+                    'TrendTex — Fabric Costing Sheet',
                     style: pw.TextStyle(
                       color: headerText,
                       fontSize: 14,
@@ -303,7 +303,7 @@ class PdfExportService {
     );
 
     final dir = await getTemporaryDirectory();
-    final fileName = 'SadeedTex_Costing_${entry.id}.pdf';
+    final fileName = 'TrendTex_Costing_${entry.id}.pdf';
     final filePath = '${dir.path}/$fileName';
     final file = File(filePath);
     await file.writeAsBytes(await pdf.save(), flush: true);

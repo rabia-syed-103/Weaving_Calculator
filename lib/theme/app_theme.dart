@@ -1,6 +1,6 @@
 /// app_theme.dart
 /// -----------------------------------------------------------------------
-/// Defines the 5 SadeedTex accent colors and builds a ThemeData for any
+/// Defines the 5 TrendTex accent colors and builds a ThemeData for any
 /// (accent, brightness) combination using Flutter's ColorScheme.fromSeed.
 ///
 /// Why fromSeed: you only need ONE color per accent (the "seed"). Flutter
@@ -34,7 +34,7 @@ extension AccentColorLabel on AccentColor {
 class AppTheme {
   AppTheme._();
 
-  /// One seed color per accent. These are the SadeedTex brand swatches —
+  /// One seed color per accent. These are the TrendTex brand swatches —
   /// change the hex values here if the design team gives you exact ones.
   static const Map<AccentColor, Color> seedColors = {
     AccentColor.green: Color(0xFF3B6D11),

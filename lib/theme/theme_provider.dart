@@ -118,19 +118,19 @@ class ThemeProvider extends ChangeNotifier {
 ///         ChangeNotifierProvider.value(value: themeProvider), // CHANGED
 ///         ChangeNotifierProvider(create: (_) => CostingProvider()),
 ///       ],
-///       child: const SadeedTexApp(),
+///       child: const TrendTexApp(),
 ///     ),
 ///   );
 /// }
 ///
-/// class SadeedTexApp extends StatelessWidget {
-///   const SadeedTexApp({super.key});
+/// class TrendTexApp extends StatelessWidget {
+///   const TrendTexApp({super.key});
 ///
 ///   @override
 ///   Widget build(BuildContext context) {
 ///     final themeProvider = context.watch<ThemeProvider>();
 ///     return MaterialApp(
-///       title: 'SadeedTex',
+///       title: 'TrendTex',
 ///       theme: AppTheme.build(
 ///         accent: themeProvider.accent,
 ///         brightness: Brightness.light,
