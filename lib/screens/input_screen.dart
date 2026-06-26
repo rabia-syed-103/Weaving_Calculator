@@ -8,95 +8,85 @@
 /// labels in Title Case. Ply and Warp Blend sit side-by-side in one row.
 /// Input Inflow and Target Price sit immediately after the headline card.
 ///
-/// VOICE INPUT (Step 19 — now wired up):
-/// The FAB mic button calls _startVoiceInput(), which opens
-/// VoiceInputModal as a modal bottom sheet via showModalBottomSheet().
-/// The modal is handed this screen's own _controllers map directly —
-/// it writes into the SAME TextEditingControllers the rest of the form
-/// uses, so every controller's existing listener (the one that drives
-/// _recalculate()) fires naturally as the modal fills in each field.
-/// No separate "apply voice results" step is needed: by the time the
-/// modal closes, _recalculate() has already run for every field it
-/// touched, exactly as if the user had typed each value by hand.
-///
-/// Warp Blend is NOT filled by voice (it's a dropdown, not a
-/// TextEditingController) — VoiceInputModal skips it in its field list
-/// and tells the user to set it manually. After the modal closes,
-/// _maybeUpdateSizingCost() and _recalculate() are triggered again here
-/// as a safety net, in case the LAST field the modal filled was Warp
-/// Count or Ply but Warp Blend still isn't set yet (so Sizing Cost / Kg
-/// and the headline numbers reflect the final form state once the
-/// sheet is dismissed, not just whatever was true mid-flow).
-///
-/// Theme: changed only via the side drawer (hamburger icon, top-left) —
-/// see widgets/settings_drawer.dart.
+/// VOICE INPUT (Step 19 — now wired up): see voice_input_modal.dart.
+/// Warp Blend is handled via warpBlendValue/onWarpBlendChanged (it's a
+/// plain `_warpBlend` field backing a DropdownButton, not a
+/// TextEditingController) — see VoiceInputModal's own class doc comment
+/// for the full story of why that distinction matters.
 ///
 /// NOTE: perPickRate has been removed entirely (confirmed unused by any
 /// formula — it duplicated inputPerPick, which IS used).
 ///
-/// REVERSE-SOLVE BEHAVIOR (Input Inflow / Target Price):
-/// These two fields don't feed any forward formula directly (confirmed —
-/// neither appears in calculation_engine.dart). In the original Excel
-/// workbook they instead drove two VBA macros that solved BACKWARDS for
-/// Input Per Pick so that Loom In Flow (for Input Inflow) or Grey Fabric
-/// Rate (for Target Price) would match what the user typed. See
-/// calculations/reverse_solver.dart for the ported macro logic.
+/// REVERSE-SOLVE BEHAVIOR (Input Inflow / Target Price): see
+/// calculations/reverse_solver.dart.
 ///
-/// Here, that's wired automatically: changing Input Inflow or Target
-/// Price solves for Input Per Pick and writes it into that field, then
-/// runs the normal forward recalculation. Whichever of the two fields
-/// was typed into MOST RECENTLY is the "active mode" — the other field
-/// is left alone (not auto-updated) until the user types into it
-/// directly, matching the Excel macro's single-mode-at-a-time behavior
-/// but without the confirmation popup (this is a live form, not a
-/// button click, so a dialog on every keystroke would be unusable).
+/// STEP 20 — YARN RATE UNIT TOGGLE (per lb / per 10lb):
+/// The Sizing/costing formula (calculation_engine.dart) has always
+/// divided warpYarnRate/weftYarnRate by 10 before multiplying by weight
+/// — i.e. InputModel.warpYarnRate and weftYarnRate are ALWAYS the
+/// "per 10 lb" figure, and that has not changed. What's new is that the
+/// customer sometimes wants to type the rate as a straight "per lb"
+/// price instead of mentally multiplying by 10 first.
 ///
-/// Input Per Pick itself stays a normal EDITABLE field (per direct
-/// instruction) — the user can type into it directly at any time, which
-/// simply runs the normal forward pass with whatever they typed (same as
-/// before reverse-solving existed). If the user then edits Input Inflow
-/// or Target Price again afterward, the solver overwrites Input Per
-/// Pick again — this is expected, not a bug.
+/// This is handled ENTIRELY as a display/entry convenience in this
+/// screen — InputModel, calculation_engine.dart, and reverse_solver.dart
+/// are completely unchanged and never see anything except the resolved
+/// per-10lb number, exactly as before.
 ///
-/// LOOP SAFETY: solving writes into inputPerPick's controller, which has
-/// its own listener -> _recalculate(). This does NOT re-trigger a solve,
-/// because inputPerPick only feeds the FORWARD formula
-/// (calculation_engine.dart), not the reverse solver. Only the inflow/
-/// targetPrice listeners call the solver, so there is no cycle.
+/// Mechanism: _warpYarnRateUnit / _weftYarnRateUnit track which unit the
+/// person is currently entering in (default: perTenLb, matching the
+/// previous behavior exactly). The TextField for each rate always shows
+/// whatever the person actually typed, in whichever unit is selected —
+/// it is NEVER silently rewritten to a converted number, since that
+/// would be confusing (type "12", watch it jump to "120"). Conversion
+/// only happens at the point those fields are READ for calculation —
+/// see _resolvedWarpYarnRate()/_resolvedWeftYarnRate(), which are used
+/// everywhere _recalculate() and the reverse solver previously read
+/// _controllers['warpYarnRate']/['weftYarnRate'] directly. When the
+/// person flips the toggle, the displayed number is converted ONCE (so
+/// switching units doesn't change the underlying real-world rate they
+/// meant), then stays in that new unit for further typing.
 ///
-/// STEP 17 — TAP TO RELOAD:
-/// didChangeDependencies() fires whenever Provider's InheritedWidget
-/// rebuilds — including the moment CostingProvider.requestReload() calls
-/// notifyListeners() from HistoryScreen. It reads pendingReload; if
-/// non-null, it consumes it immediately (so a later rebuild can't apply
-/// the same entry twice) and fills every controller via
-/// _fillControllersFrom(). That fill relies on each controller's own
-/// listener to trigger _recalculate() as values are set — no separate
-/// guard or explicit recalculate call is needed, since the LAST field
-/// set in the loop will be the one whose listener fires last and runs
-/// the calculation with every other field already in place.
+/// STEP 20 — SHRINKAGE FROM WEIGHT (alternate entry mode):
+/// The customer normally provides Warp/Weft Shrinkage % and Warp/Weft
+/// Wastage % directly (the original, still-default behavior — nothing
+/// about that path changes). The new alternate mode lets them instead
+/// provide a single WEIGHT figure for warp and weft, with Wastage fixed
+/// at 3% for both (per direct instruction), and Shrinkage % is reverse-
+/// derived from that weight using the exact same formula
+/// calculation_engine.dart already uses forward:
+///   WarpWeight = ROUND(EndsPerInch * Width * (1 + WarpShrinkage/100 +
+///                 WarpWastage/100) / (768.1 * WarpCount) /
+///                 (1 - OffGrade/100), 4)
+/// Solved for WarpShrinkage (with WarpWastage fixed at 3):
+///   WarpShrinkage% = ((WarpWeight * 768.1 * WarpCount *
+///                      (1 - OffGrade/100)) / (EndsPerInch * Width)
+///                      - 1.03) * 100
+/// (WeftShrinkage mirrors this using PicksPerInch/WeftCount/WeftWeight.)
 ///
-/// FOCUS-TRIGGERED REVERSE SOLVE (Input Inflow / Target Price):
-/// Beyond the text-change listener, both fields also carry a FocusNode
-/// that re-runs their reverse solve the instant the field gains focus
-/// (tap-in), using whatever number is already there. This fixes a
-/// specific staleness bug: solving from Target Price overwrites Input
-/// Per Pick, which means Input Inflow's last-displayed number no longer
-/// reverse-solves to the CURRENT Input Per Pick — tapping back into
-/// Input Inflow without retyping anything used to leave that stale
-/// number on screen. See the _inputInflowFocus / _targetPriceFocus
-/// field comments below for the full explanation.
+/// Toggling this mode ON:
+///   - Wastage% fields are forced to '3' and made read-only.
+///   - Shrinkage% fields become read-only and are filled by the reverse
+///     formula above, recomputed live whenever Warp/Weft Weight,
+///     EndsPerInch/PicksPerInch, Width, WarpCount/WeftCount, or Off
+///     Grade % change.
+///   - If the inputs would imply a NEGATIVE shrinkage (weight entered is
+///     too small for the other geometry to be physically consistent),
+///     the field shows an inline error instead of writing a negative
+///     percent — calculation_engine.dart is never handed a nonsensical
+///     negative shrinkage.
+/// Toggling OFF restores normal manual entry for both Shrinkage% and
+/// Wastage% (Wastage% is simply unlocked again — it stays at '3' until
+/// the person edits it, rather than being reset to some other default).
 ///
-/// SIZING COST / KG — editable + independent fast lookup:
-/// This field is no longer read-only. Warp Count and Ply (plus the Warp
-/// Blend dropdown) each trigger _maybeUpdateSizingCost(), a lookup that
-/// runs independently of _recalculate() and therefore doesn't wait for
-/// all 25+ other fields to be filled in first. Auto-lookup always wins
-/// over manual entry the moment those three inputs produce a match;
-/// a manually typed value only survives when the repository has no
-/// match for the current Warp Count/Ply/Blend combination — see
-/// _maybeUpdateSizingCost() and the rate-fallback logic inside
-/// _recalculate() for the exact rules.
+/// Either way, by the time _recalculate() runs, warpShrinkagePct/
+/// weftShrinkagePct/warpWastagePct/weftWastagePct controllers hold a
+/// normal resolved percent — InputModel and calculation_engine.dart
+/// have no idea which entry mode produced that number, exactly like the
+/// yarn-rate unit toggle above.
+///
+/// Theme: changed only via the side drawer (hamburger icon, top-left) —
+/// see widgets/settings_drawer.dart.
 library;
 
 import 'package:flutter/material.dart';
@@ -110,8 +100,14 @@ import '../widgets/headline_banner.dart';
 import '../widgets/input_field_card.dart';
 import '../widgets/share_action_button.dart';
 import '../widgets/voice_input_modal.dart';
-import 'main_nav_shell.dart';
 import '../widgets/warp_blend_options.dart';
+import 'main_nav_shell.dart';
+
+/// Which unit the person is currently typing a yarn rate in. Purely a
+/// UI/entry concern — see the STEP 20 doc comment above. Internally
+/// everything still resolves to "per 10 lb" before reaching InputModel.
+enum YarnRateUnit { perLb, perTenLb }
+
 class InputScreen extends StatefulWidget {
   const InputScreen({super.key});
 
@@ -166,36 +162,171 @@ class _InputScreenState extends State<InputScreen> {
   // avoids a redundant double-recalculate).
   bool _isSolving = false;
 
-  // Same idea as _isSolving, but for sizingCostPerKg: when
-  // _recalculate() itself writes the looked-up rate into that field
-  // (auto-lookup winning over manual entry), that write fires the
-  // field's own listener too. Without this guard, that would trigger a
-  // second, redundant _recalculate() call right after the first one —
-  // harmless in terms of correctness (it would just recompute the same
-  // result), but unnecessary work on every keystroke in warpCount/ply.
+  // Same idea as _isSolving, but for sizingCostPerKg.
   bool _isWritingSizingCost = false;
 
+  // ---------------------------------------------------------------------
+  // STEP 20 — Yarn Rate unit toggle state.
+  // Default perTenLb matches the value that was always being typed in
+  // here before this feature existed, so existing users/history entries
+  // see no behavior change unless they explicitly switch a toggle.
+  // ---------------------------------------------------------------------
+  YarnRateUnit _warpYarnRateUnit = YarnRateUnit.perTenLb;
+  YarnRateUnit _weftYarnRateUnit = YarnRateUnit.perTenLb;
+
+  /// The resolved, ALWAYS-per-10lb number that should actually be fed
+  /// into InputModel/calculation_engine.dart/reverse_solver.dart — use
+  /// this everywhere _controllers['warpYarnRate']!.text used to be read
+  /// directly for a calculation. Returns null if the field is empty or
+  /// not a valid number (same contract double.tryParse callers expect).
+  double? _resolvedWarpYarnRate() {
+    final raw = double.tryParse(_controllers['warpYarnRate']!.text.trim());
+    if (raw == null) return null;
+    return _warpYarnRateUnit == YarnRateUnit.perLb ? raw * 10 : raw;
+  }
+
+  double? _resolvedWeftYarnRate() {
+    final raw = double.tryParse(_controllers['weftYarnRate']!.text.trim());
+    if (raw == null) return null;
+    return _weftYarnRateUnit == YarnRateUnit.perLb ? raw * 10 : raw;
+  }
+
+  /// Flips the unit for one of the two rate fields, converting the
+  /// CURRENTLY DISPLAYED number so the real-world rate the person meant
+  /// stays the same — e.g. "12" per-lb becomes "120" per-10lb, not left
+  /// at "12" now meaning something 10x smaller. Only runs the
+  /// conversion if the field currently holds a valid number; an empty
+  /// or invalid field just switches the unit with nothing to convert.
+  void _setWarpYarnRateUnit(YarnRateUnit unit) {
+    if (unit == _warpYarnRateUnit) return;
+    final controller = _controllers['warpYarnRate']!;
+    final current = double.tryParse(controller.text.trim());
+    setState(() {
+      if (current != null) {
+        final converted =
+        unit == YarnRateUnit.perLb ? current / 10 : current * 10;
+        controller.text = _formatNumber(converted);
+      }
+      _warpYarnRateUnit = unit;
+    });
+    _recalculate();
+  }
+
+  void _setWeftYarnRateUnit(YarnRateUnit unit) {
+    if (unit == _weftYarnRateUnit) return;
+    final controller = _controllers['weftYarnRate']!;
+    final current = double.tryParse(controller.text.trim());
+    setState(() {
+      if (current != null) {
+        final converted =
+        unit == YarnRateUnit.perLb ? current / 10 : current * 10;
+        controller.text = _formatNumber(converted);
+      }
+      _weftYarnRateUnit = unit;
+    });
+    _recalculate();
+  }
+
+  // ---------------------------------------------------------------------
+  // STEP 20 — Shrinkage-from-Weight toggle state.
+  // ---------------------------------------------------------------------
+  bool _useWeightForShrinkage = false;
+
+  // Separate controllers for the weight entry fields — NOT part of
+  // _controllers/InputModel; these are pure UI inputs that feed the
+  // reverse-shrinkage formula, the same role a calculator's scratch
+  // pad would play. Nothing reads these except this screen.
+  final TextEditingController _warpWeightController = TextEditingController();
+  final TextEditingController _weftWeightController = TextEditingController();
+
+  // Inline error text shown under the weight fields when the entered
+  // weight would reverse-solve to a negative shrinkage (physically
+  // inconsistent with the other geometry fields) — see
+  // _recomputeShrinkageFromWeight() below.
+  String? _warpWeightError;
+  String? _weftWeightError;
+
+  void _setUseWeightForShrinkage(bool value) {
+    setState(() {
+      _useWeightForShrinkage = value;
+      if (value) {
+        // Wastage is fixed at 3/3 in this mode, per direct instruction.
+        _controllers['warpWastagePct']!.text = '3';
+        _controllers['weftWastagePct']!.text = '3';
+        _recomputeShrinkageFromWeight();
+      } else {
+        // Leaving weight mode: just unlock the fields again. Wastage
+        // stays at whatever it currently shows ('3', most likely) until
+        // the person edits it by hand — nothing is reset to a different
+        // default, since there's no other "previous" value to restore.
+        _warpWeightError = null;
+        _weftWeightError = null;
+      }
+    });
+    _recalculate();
+  }
+
+  /// Reverse-solves Warp/Weft Shrinkage % from the user-entered
+  /// Warp/Weft Weight, with Wastage fixed at 3 — see the STEP 20 doc
+  /// comment at the top of this file for the algebra. Only writes a
+  /// result when every input it needs is present and produces a
+  /// non-negative shrinkage; otherwise leaves the field as-is and sets
+  /// the matching error string instead (so a half-typed weight doesn't
+  /// flash a wrong/negative percent while the person is still typing).
+  void _recomputeShrinkageFromWeight() {
+    if (!_useWeightForShrinkage) return;
+
+    final endsPerInch = double.tryParse(_controllers['endsPerInch']!.text.trim());
+    final picksPerInch = double.tryParse(_controllers['picksPerInch']!.text.trim());
+    final width = double.tryParse(_controllers['width']!.text.trim());
+    final warpCount = double.tryParse(_controllers['warpCount']!.text.trim());
+    final weftCount = double.tryParse(_controllers['weftCount']!.text.trim());
+    final offGrade = double.tryParse(_controllers['offGradePct']!.text.trim());
+    final warpWeight = double.tryParse(_warpWeightController.text.trim());
+    final weftWeight = double.tryParse(_weftWeightController.text.trim());
+
+    setState(() {
+      _warpWeightError = null;
+      if (warpWeight != null &&
+          endsPerInch != null &&
+          width != null &&
+          warpCount != null &&
+          offGrade != null &&
+          endsPerInch != 0 &&
+          width != 0) {
+        final pct = ((warpWeight * 768.1 * warpCount * (1 - offGrade / 100)) /
+            (endsPerInch * width) -
+            1.03) *
+            100;
+        if (pct < 0) {
+          _warpWeightError = 'Weight too low for these dimensions';
+        } else {
+          _controllers['warpShrinkagePct']!.text = _formatNumber(pct);
+        }
+      }
+
+      _weftWeightError = null;
+      if (weftWeight != null &&
+          picksPerInch != null &&
+          width != null &&
+          weftCount != null &&
+          offGrade != null &&
+          picksPerInch != 0 &&
+          width != 0) {
+        final pct = ((weftWeight * 768.1 * weftCount * (1 - offGrade / 100)) /
+            (picksPerInch * width) -
+            1.03) *
+            100;
+        if (pct < 0) {
+          _weftWeightError = 'Weight too low for these dimensions';
+        } else {
+          _controllers['weftShrinkagePct']!.text = _formatNumber(pct);
+        }
+      }
+    });
+  }
+
   // FOCUS-TRIGGERED REVERSE SOLVE — Input Inflow / Target Price.
-  //
-  // Problem this solves: tap Loom In Flow, type a number -> solves
-  // Input Per Pick from THAT field. Tap Target Price, type a number ->
-  // solves Input Per Pick from Target Price instead, overwriting the
-  // previous solve. Tap back into Loom In Flow WITHOUT changing its
-  // text -> nothing happens, because the text-change listener only
-  // fires on an actual edit. But the number sitting in Loom In Flow is
-  // now stale: it no longer matches the Input Per Pick that Target
-  // Price's solve just produced. The field looks unchanged, but its
-  // "meaning" (whether it still correctly reverse-solves to the CURRENT
-  // Input Per Pick) has silently gone wrong — annoying exactly because
-  // nothing on screen signals it.
-  //
-  // Fix: a FocusNode per field, with a listener that fires the SAME
-  // reverse solve the moment the field gains focus (tap-in), using
-  // whatever number is already sitting in the field. This refreshes
-  // the calculation to be consistent with the current Input Per Pick
-  // even when the user hasn't typed anything yet — tapping alone is
-  // enough to ask "does this field's solve still hold?" and correct it
-  // if not.
   final _inputInflowFocus = FocusNode();
   final _targetPriceFocus = FocusNode();
 
@@ -211,36 +342,27 @@ class _InputScreenState extends State<InputScreen> {
         entry.value.addListener(() => _recalculate());
       }
 
-      // SIZING COST / KG — fast, independent lookup.
-      //
-      // Problem this solves: previously, Sizing Cost / Kg only ever got
-      // filled in deep inside _recalculate(), which first checks ALL 25
-      // required fields and bails out early if even one is missing. So
-      // the user had to fill in the entire form before Sizing Cost / Kg
-      // ever appeared — even though the lookup itself only needs 3
-      // values (Warp Count, Ply, Warp Blend).
-      //
-      // Fix: warpCount and ply each also get this lightweight listener,
-      // which runs SizingRatesRepository.lookup() on its own the moment
-      // all three of its inputs are present — independent of whether
-      // the other 22 fields are filled in yet. Warp Blend's dropdown
-      // calls this directly from onChanged (see _warpBlendAndPlyRow())
-      // since it isn't a text controller.
-      //
-      // Per direct instruction, auto-lookup ALWAYS overwrites whatever
-      // is currently in the field — including a value the user typed
-      // in manually. Manual entry only "sticks" when the lookup itself
-      // doesn't have a match (incomplete fields, or no matching Sizing
-      // Rate row) — at that point _maybeUpdateSizingCost() simply does
-      // nothing, leaving whatever's already in the field untouched.
       if (entry.key == 'warpCount' || entry.key == 'ply') {
         entry.value.addListener(_maybeUpdateSizingCost);
       }
+
+      // STEP 20 — any of the geometry fields the reverse-shrinkage
+      // formula depends on should refresh the derived %ages live when
+      // weight mode is active. Harmless no-op (early-returns instantly)
+      // when _useWeightForShrinkage is false.
+      if (entry.key == 'endsPerInch' ||
+          entry.key == 'picksPerInch' ||
+          entry.key == 'width' ||
+          entry.key == 'warpCount' ||
+          entry.key == 'weftCount' ||
+          entry.key == 'offGradePct') {
+        entry.value.addListener(_recomputeShrinkageFromWeight);
+      }
     }
 
-    // Re-run the relevant reverse solve as soon as the user taps into
-    // either field — see the comment above this block for why a
-    // text-change listener alone isn't enough.
+    _warpWeightController.addListener(_recomputeShrinkageFromWeight);
+    _weftWeightController.addListener(_recomputeShrinkageFromWeight);
+
     _inputInflowFocus.addListener(() {
       if (_inputInflowFocus.hasFocus) {
         _recalculate(solveFrom: SolverMode.inFlow, fromFocus: true);
@@ -253,18 +375,6 @@ class _InputScreenState extends State<InputScreen> {
     });
   }
 
-  /// Looks up Sizing Cost / Kg from just Warp Count + Ply + Warp Blend,
-  /// independent of every other field on the form — see the comment in
-  /// initState() above for why this exists separately from
-  /// _recalculate(). Called from warpCount/ply text listeners and from
-  /// the Warp Blend dropdown's onChanged.
-  ///
-  /// If all three inputs are present and a matching Sizing Rate exists,
-  /// the field is overwritten with the looked-up rate (auto-lookup
-  /// always wins over manual entry, per direct instruction). If any
-  /// input is missing or there's no match, this does nothing — it does
-  /// NOT clear the field, so a manually-typed value stays put until a
-  /// real match overwrites it.
   void _maybeUpdateSizingCost() {
     final warpCount = double.tryParse(_controllers['warpCount']!.text.trim());
     final ply = double.tryParse(_controllers['ply']!.text.trim());
@@ -296,27 +406,11 @@ class _InputScreenState extends State<InputScreen> {
     }
     _inputInflowFocus.dispose();
     _targetPriceFocus.dispose();
+    _warpWeightController.dispose();
+    _weftWeightController.dispose();
     super.dispose();
   }
 
-  /// Watches CostingProvider for a pending reload request (set when the
-  /// user taps a History card). Fills all controllers from the stored
-  /// InputModel, then calls consumeReload() to clear the pending state.
-  ///
-  /// IMPORTANT — must use context.watch() here, not context.read().
-  /// InputScreen lives inside MainNavShell's IndexedStack, which keeps
-  /// it alive (never disposed/recreated) when switching tabs — that's
-  /// the whole point of IndexedStack, so the 28 controllers don't reset
-  /// every time the user looks at another tab. But it means
-  /// didChangeDependencies() does NOT get a fresh natural trigger just
-  /// from switching back to the Costing tab; it only re-runs when an
-  /// InheritedWidget this widget actually DEPENDS ON changes. read()
-  /// grabs a value once without subscribing, so the widget never
-  /// becomes a dependent of CostingProvider, and requestReload()'s
-  /// notifyListeners() call goes unnoticed. watch() subscribes properly,
-  /// so this method re-fires the moment HistoryScreen calls
-  /// requestReload() — which is also why the History tab doesn't need
-  /// to be visited for the reload to take effect.
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -328,6 +422,16 @@ class _InputScreenState extends State<InputScreen> {
 
   /// Fills every controller (and _warpBlend dropdown) from a saved
   /// InputModel — used by "tap to reload" (Step 17).
+  ///
+  /// STEP 20 note: warpYarnRate/weftYarnRate from a saved InputModel are
+  /// always the resolved per-10lb number (that's all InputModel has ever
+  /// stored) — reloading always displays them in per-10lb terms too,
+  /// resetting both unit toggles back to perTenLb. This is deliberate:
+  /// there's no stored record of which unit the person originally typed
+  /// in, so per-10lb (the unambiguous, calculation-native unit) is the
+  /// only safe default on reload. Same reasoning for shrinkage: a
+  /// reloaded entry always shows in normal %-entry mode, since there's
+  /// no stored "weight" value to repopulate the weight fields with.
   void _fillControllersFrom(InputModel input) {
     _warpBlend = input.warpBlend;
     _controllers['ply']!.text = input.ply.toString();
@@ -361,33 +465,19 @@ class _InputScreenState extends State<InputScreen> {
     _controllers['targetPrice']!.text = input.targetPrice.toString();
     // sizingCostPerKg is read-only (lookup result), don't fill it —
     // it will auto-update when _recalculate() runs from the listeners.
+
+    // STEP 20 — reset both entry-mode toggles to their defaults on
+    // reload, per the doc comment above.
+    _warpYarnRateUnit = YarnRateUnit.perTenLb;
+    _weftYarnRateUnit = YarnRateUnit.perTenLb;
+    _useWeightForShrinkage = false;
+    _warpWeightController.clear();
+    _weftWeightController.clear();
+    _warpWeightError = null;
+    _weftWeightError = null;
   }
 
   /// STEP 19 — opens the voice-fill modal as a bottom sheet.
-  ///
-  /// VoiceInputModal is handed _controllers DIRECTLY (the same map every
-  /// other field in this screen writes to) — not a copy. As the modal
-  /// confirms each spoken value, it writes straight into the matching
-  /// TextEditingController, which means that controller's own listener
-  /// (already wired up in initState() above) fires immediately, exactly
-  /// like a normal keystroke would. So _recalculate() and
-  /// _maybeUpdateSizingCost() run incrementally AS the user speaks
-  /// through the fields — there's no separate "import voice results"
-  /// step after the sheet closes.
-  ///
-  /// isScrollControlled: true lets the sheet take up more height than
-  /// the default bottom-sheet cap, since VoiceInputModal's content
-  /// (progress bar, transcript box, three action buttons) is taller
-  /// than a typical bottom sheet.
-  ///
-  /// After the sheet closes (await returns — whether via the Done
-  /// button or a swipe-to-dismiss), _maybeUpdateSizingCost() and
-  /// _recalculate() are called once more as a safety net: if the very
-  /// last field the user spoke was Warp Count or Ply, and they hadn't
-  /// set Warp Blend from the dropdown yet at that moment, this catches
-  /// up Sizing Cost / Kg and the headline numbers once the user is back
-  /// on the main form and (presumably) about to pick Warp Blend
-  /// manually. Harmless no-op if everything was already current.
   Future<void> _startVoiceInput() async {
     await showModalBottomSheet(
       context: context,
@@ -409,17 +499,6 @@ class _InputScreenState extends State<InputScreen> {
     _recalculate();
   }
 
-  /// [solveFrom] is non-null when this call was triggered by editing
-  /// Input Inflow or Target Price — in that case, Input Per Pick is
-  /// solved backwards FIRST, then the normal forward pass runs using
-  /// the solved value.
-  ///
-  /// [fromFocus] is true when this call came from a FocusNode listener
-  /// (tapping into the field) rather than a text-change listener. In
-  /// that case, if the field is empty/zero — i.e. the user hasn't
-  /// actually entered a target value yet — skip the solve entirely
-  /// instead of showing a "Target Price is zero!" style error just for
-  /// tapping into an untouched field.
   void _recalculate({SolverMode? solveFrom, bool fromFocus = false}) {
     if (_isSolving) return; // re-entrancy guard, see field doc above
     if (_isWritingSizingCost) return; // see field doc above
@@ -436,6 +515,15 @@ class _InputScreenState extends State<InputScreen> {
       final values = {
         for (final key in _controllers.keys) key: num(key),
       };
+
+      // STEP 20 — warpYarnRate/weftYarnRate are overridden here with the
+      // UNIT-RESOLVED values (always per-10lb) instead of the raw parsed
+      // controller text, which may be in per-lb terms right now. Every
+      // other read of `values` below is unaffected — this is the single
+      // point where the unit conversion actually takes effect for the
+      // forward calculation.
+      values['warpYarnRate'] = _resolvedWarpYarnRate();
+      values['weftYarnRate'] = _resolvedWeftYarnRate();
 
       final warpBlend = _warpBlend ?? '';
       final weave = _controllers['weave']!.text.trim();
@@ -465,21 +553,6 @@ class _InputScreenState extends State<InputScreen> {
         blend: warpBlend,
       );
 
-      // SIZING COST / KG — auto-lookup vs manual entry.
-      //
-      // If the repository has a match (rate != null), it ALWAYS wins —
-      // per direct instruction, auto-lookup overwrites any manually
-      // typed value the moment Warp Count/Ply/Blend changes. The field
-      // itself is updated to show the looked-up number, replacing
-      // whatever was there before.
-      //
-      // If there's no match (rate == null) — which the repository's
-      // closest-match logic makes rare, but not impossible — fall back
-      // to whatever is currently sitting in the Sizing Cost / Kg field,
-      // since that may be a value the user typed in deliberately. Only
-      // bail out to the zeroed/cleared state if that field is ALSO
-      // empty or invalid, i.e. there is truly no usable rate from
-      // either source.
       double effectiveSizingCost;
       if (rate != null) {
         effectiveSizingCost = rate.perKg;
@@ -496,15 +569,8 @@ class _InputScreenState extends State<InputScreen> {
           return;
         }
         effectiveSizingCost = manual;
-        // Leave the field exactly as the user typed it — don't reformat
-        // or touch it here.
       }
 
-      // Build the InputModel with whatever Input Per Pick currently is —
-      // needed both as the final forward-pass input AND, if solveFrom is
-      // set, as the "fixed values" source the solver reads from (the
-      // solver only reads fields that don't depend on inputPerPick, so
-      // its current value here is irrelevant to the solve itself).
       InputModel buildInput(double inputPerPickValue) => InputModel(
         warpBlend: warpBlend,
         ply: values['ply']!,
@@ -557,10 +623,6 @@ class _InputScreenState extends State<InputScreen> {
 
         if (result.isError) {
           _solverError = result.errorMessage;
-          // Don't touch inputPerPick or the headline numbers — leave the
-          // last good state on screen rather than zeroing everything out
-          // over a transient invalid value (e.g. while the user is still
-          // typing "Target Price too low" mid-keystroke).
           return;
         }
 
@@ -584,8 +646,6 @@ class _InputScreenState extends State<InputScreen> {
   }
 
   String _formatNumber(double value) {
-    // Trim trailing zeros so the field doesn't show "0.691512000" —
-    // matches how a person would type it in.
     var s = value.toStringAsFixed(6);
     s = s.replaceFirst(RegExp(r'0+$'), '');
     s = s.replaceFirst(RegExp(r'\.$'), '');
@@ -659,11 +719,6 @@ class _InputScreenState extends State<InputScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Input Inflow + Target Price come right after the
-                    // headline card. Editing either one re-solves Input
-                    // Per Pick automatically — see the class-level doc
-                    // comment for how the two stay in sync without
-                    // looping.
                     _section('Inflow & Target', [
                       _field('inputInflow', 'Input Inflow', focusNode: _inputInflowFocus),
                       _field('targetPrice', 'Target Price', focusNode: _targetPriceFocus),
@@ -679,15 +734,20 @@ class _InputScreenState extends State<InputScreen> {
                       _field('selvedge', 'Selvedge', type: FieldType.text),
                       _field('writing', 'Writing', type: FieldType.text),
                     ]),
-                    _section('Shrinkage & Wastage', [
-                      _field('warpShrinkagePct', 'Warp Shrinkage %'),
-                      _field('weftShrinkagePct', 'Weft Shrinkage %'),
-                      _field('warpWastagePct', 'Warp Wastage %'),
-                      _field('weftWastagePct', 'Weft Wastage %'),
-                    ]),
+                    _shrinkageWastageSection(),
                     _section('Rates & Costing', [
-                      _field('warpYarnRate', 'Warp Yarn Rate'),
-                      _field('weftYarnRate', 'Weft Yarn Rate'),
+                      _yarnRateField(
+                        key: 'warpYarnRate',
+                        label: 'Warp Yarn Rate',
+                        unit: _warpYarnRateUnit,
+                        onUnitChanged: _setWarpYarnRateUnit,
+                      ),
+                      _yarnRateField(
+                        key: 'weftYarnRate',
+                        label: 'Weft Yarn Rate',
+                        unit: _weftYarnRateUnit,
+                        onUnitChanged: _setWeftYarnRateUnit,
+                      ),
                       _field('sizingCostPerKg', 'Sizing Cost / Kg'),
                       _field('commissionPct', 'Commission %'),
                       _field('inputPerPick', 'Input Per Pick'),
@@ -748,6 +808,108 @@ class _InputScreenState extends State<InputScreen> {
     );
   }
 
+  /// STEP 20 — Shrinkage & Wastage section, now with a mode toggle.
+  /// When _useWeightForShrinkage is false, this renders EXACTLY like
+  /// before (four plain editable % fields). When true, it instead shows
+  /// the two weight-entry fields plus the same four % fields rendered
+  /// read-only (Wastage pinned at 3, Shrinkage filled by the reverse
+  /// formula).
+  Widget _shrinkageWastageSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final usableWidth = screenWidth - 32;
+    final halfWidth = (usableWidth - 8) / 2;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'SHRINKAGE & WASTAGE',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Use weight instead',
+                    style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                  ),
+                  Switch(
+                    value: _useWeightForShrinkage,
+                    onChanged: _setUseWeightForShrinkage,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (_useWeightForShrinkage) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                SizedBox(
+                  width: halfWidth,
+                  child: InputFieldCard(
+                    label: 'Warp Weight',
+                    controller: _warpWeightController,
+                    type: FieldType.number
+                  ),
+                ),
+                SizedBox(
+                  width: halfWidth,
+                  child: InputFieldCard(
+                    label: 'Weft Weight',
+                    controller: _weftWeightController,
+                    type: FieldType.number,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _field(
+                'warpShrinkagePct',
+                'Warp Shrinkage %',
+                readOnly: _useWeightForShrinkage,
+              ),
+              _field(
+                'weftShrinkagePct',
+                'Weft Shrinkage %',
+                readOnly: _useWeightForShrinkage,
+              ),
+              _field(
+                'warpWastagePct',
+                'Warp Wastage %',
+                readOnly: _useWeightForShrinkage,
+              ),
+              _field(
+                'weftWastagePct',
+                'Weft Wastage %',
+                readOnly: _useWeightForShrinkage,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _warpBlendAndPlyRow() {
     final screenWidth = MediaQuery.of(context).size.width;
     final usableWidth = screenWidth - 32;
@@ -793,7 +955,7 @@ class _InputScreenState extends State<InputScreen> {
                         .map((b) => DropdownMenuItem(value: b, child: Text(b)))
                         .toList(),
                     onChanged: (value) {
-                      _warpBlend = value;
+                      setState(() => _warpBlend = value);
                       _maybeUpdateSizingCost();
                       _recalculate();
                     },
@@ -812,6 +974,90 @@ class _InputScreenState extends State<InputScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// STEP 20 — Warp/Weft Yarn Rate field with its per-lb / per-10lb
+  /// toggle. The underlying TextField is the SAME _controllers entry as
+  /// before (unchanged key, unchanged width/layout) — only a small unit
+  /// switcher is added above it. See _resolvedWarpYarnRate()/
+  /// _resolvedWeftYarnRate() for where the actual conversion happens;
+  /// nothing here touches the displayed text based on the unit, only on
+  /// an explicit toggle action (_setWarpYarnRateUnit/
+  /// _setWeftYarnRateUnit).
+  Widget _yarnRateField({
+    required String key,
+    required String label,
+    required YarnRateUnit unit,
+    required ValueChanged<YarnRateUnit> onUnitChanged,
+  }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final usableWidth = screenWidth - 32;
+    final halfWidth = (usableWidth - 8) / 2;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      width: halfWidth,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InputFieldCard(
+            label: label,
+            controller: _controllers[key]!,
+            type: FieldType.number,
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _unitChip(
+                label: 'per lb',
+                selected: unit == YarnRateUnit.perLb,
+                onTap: () => onUnitChanged(YarnRateUnit.perLb),
+                colorScheme: colorScheme,
+              ),
+              const SizedBox(width: 6),
+              _unitChip(
+                label: 'per 10 lb',
+                selected: unit == YarnRateUnit.perTenLb,
+                onTap: () => onUnitChanged(YarnRateUnit.perTenLb),
+                colorScheme: colorScheme,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _unitChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    required ColorScheme colorScheme,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? colorScheme.primaryContainer : colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? colorScheme.primary : colorScheme.outlineVariant,
+            width: selected ? 1.2 : 0.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
     );
   }
 
