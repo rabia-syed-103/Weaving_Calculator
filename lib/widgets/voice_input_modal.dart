@@ -80,6 +80,38 @@
 /// value is already live in the controller the moment it's typed or
 /// recognized, exactly like the rest of the input screen).
 ///
+/// STEP 20 — SHARED YARN RATE UNIT TOGGLE (per lb / per 10 lb):
+/// Warp Yarn Rate (step 13) and Weft Yarn Rate (step 14) write into the
+/// SAME _controllers['warpYarnRate']/['weftYarnRate'] that InputScreen
+/// itself reads, and InputScreen now resolves both of those through a
+/// SINGLE shared per-lb/per-10lb unit toggle (see input_screen.dart's
+/// STEP 20 doc comment) rather than two independent ones. Without this
+/// modal being aware of that, speaking/typing a number here would write
+/// it ambiguously — e.g. saying "12" for Warp Yarn Rate means something
+/// 10x different depending on which unit the screen is currently set
+/// to, and this modal had no way to show that or let the person flip it.
+///
+/// Fixed by threading the EXACT SAME yarnRateUnit value through to this
+/// modal, the same way Warp Blend is threaded through (see
+/// warpBlendValue/onWarpBlendChanged below): yarnRateUnit is the
+/// CURRENT shared unit, onYarnRateUnitChanged is called the instant the
+/// person flips the chip toggle inside this modal. There's only ever
+/// ONE value live for the whole screen+modal — flipping it in either
+/// place updates both immediately, exactly mirroring InputScreen's own
+/// _setYarnRateUnit() conversion logic, including converting whatever
+/// numbers are CURRENTLY in both the warpYarnRate and weftYarnRate
+/// controllers together (so the real-world rate the person meant
+/// doesn't change just because the unit label did). The two sides don't
+/// call each other's conversion method directly, though — this modal
+/// does its own conversion, then InputScreen is just told the new unit
+/// via a separate sync-only callback, so the actual /10-or-*10 math
+/// never runs twice for one flip; see this State class's own
+/// _setYarnRateUnit() doc comment for the exact mechanism. The toggle
+/// itself is shown on BOTH the Warp Yarn Rate and Weft Yarn Rate steps
+/// (steps 13 and 14) since they're two separate stops in the sequence —
+/// whichever one the
+/// person is currently on, they can see and flip the one shared unit.
+///
 /// NO MORE "DIDN'T CATCH THAT" RETRY HINT:
 /// A previous version showed a small red "Didn't catch that — try
 /// again" hint under the transcript box whenever a recoverable engine
@@ -159,6 +191,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'warp_blend_options.dart';
+import 'yarn_rate_unit.dart';
 
 // =========================================================================
 // FIELD MODEL
@@ -572,11 +605,39 @@ class VoiceInputModal extends StatefulWidget {
   final String? warpBlendValue;
   final ValueChanged<String?> onWarpBlendChanged;
 
+  /// STEP 20 — same threading pattern as warpBlendValue/
+  /// onWarpBlendChanged above, but for the shared Warp/Weft Yarn Rate
+  /// unit toggle (per lb / per 10 lb). See this file's STEP 20 doc
+  /// comment for the full story.
+  ///   yarnRateUnit          — the CURRENT shared unit (InputScreen's
+  ///                           _yarnRateUnit), so this modal's toggle
+  ///                           always shows the same selection as the
+  ///                           main screen's, never an independent copy.
+  ///   onYarnRateUnitChanged — called AFTER this modal has already
+  ///                           converted both warpYarnRate/weftYarnRate
+  ///                           controllers itself (see this State
+  ///                           class's own _setYarnRateUnit()). This is
+  ///                           NOT InputScreen's _setYarnRateUnit passed
+  ///                           straight through — that would convert the
+  ///                           already-converted numbers a second time.
+  ///                           InputScreen instead passes a separate
+  ///                           sync-only callback
+  ///                           (_syncYarnRateUnitFromModal) that just
+  ///                           records the new unit and recalculates,
+  ///                           so the actual /10-or-*10 math happens in
+  ///                           exactly one place per toggle flip,
+  ///                           regardless of whether the flip happened
+  ///                           here or on the main screen.
+  final YarnRateUnit yarnRateUnit;
+  final ValueChanged<YarnRateUnit> onYarnRateUnitChanged;
+
   const VoiceInputModal({
     super.key,
     required this.controllers,
     required this.warpBlendValue,
     required this.onWarpBlendChanged,
+    required this.yarnRateUnit,
+    required this.onYarnRateUnitChanged,
   });
 
   @override
@@ -633,6 +694,16 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   bool _urduAvailable = false;
   bool _checkingLocales = true;
 
+  // STEP 20 — local mirror of the shared yarn-rate unit, seeded from
+  // widget.yarnRateUnit. Mirrors the SAME pattern as _lang (a plain
+  // enum field the build method reads directly), NOT the warpBlend
+  // proxy-controller pattern below — there's no TextEditingController
+  // involved here, just a small enum, so a plain field + setState is
+  // enough. Every change still gets forwarded to
+  // widget.onYarnRateUnitChanged so InputScreen's copy stays in sync —
+  // see _setYarnRateUnit() below.
+  late YarnRateUnit _yarnRateUnit = widget.yarnRateUnit;
+
   // Free-text controller backing the Ply field's "Other" slot. Kept
   // separate from widget.controllers['ply'] (which always holds the
   // single source of truth for Ply's value) so the text field has
@@ -670,6 +741,14 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     return widget.controllers[_currentField.key] ??
         (widget.controllers[_currentField.key] = TextEditingController());
   }
+
+  /// STEP 20 — true when the current step is either Warp Yarn Rate or
+  /// Weft Yarn Rate, i.e. the two steps that should show the shared
+  /// per-lb/per-10lb toggle. Both steps show it (not just one) since
+  /// they're two separate stops in the sequence and the person might
+  /// land on either one first.
+  bool get _showYarnRateToggle =>
+      _currentField.key == 'warpYarnRate' || _currentField.key == 'weftYarnRate';
 
   @override
   void initState() {
@@ -795,6 +874,47 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
     });
   }
 
+  /// STEP 20 — flips the SHARED unit for both Warp and Weft Yarn Rate,
+  /// converting the CURRENTLY DISPLAYED number in BOTH
+  /// widget.controllers['warpYarnRate'] and ['weftYarnRate'] together —
+  /// this is a deliberate line-for-line mirror of InputScreen's own
+  /// _setYarnRateUnit(), operating on the exact same controllers (since
+  /// widget.controllers IS InputScreen's _controllers map, passed by
+  /// reference). After converting, forwards the new unit to
+  /// widget.onYarnRateUnitChanged.
+  ///
+  /// IMPORTANT: widget.onYarnRateUnitChanged is NOT InputScreen's
+  /// _setYarnRateUnit — that would re-run the same /10-or-*10 math on
+  /// numbers this method just finished converting, silently corrupting
+  /// both rates. InputScreen instead passes a separate, sync-only
+  /// callback (_syncYarnRateUnitFromModal) that just records the new
+  /// unit and recalculates. So the actual conversion math happens
+  /// exactly once per flip — here, when the flip originates in this
+  /// modal — never twice.
+  void _setYarnRateUnit(YarnRateUnit unit) {
+    if (unit == _yarnRateUnit) return;
+    final warpController = widget.controllers['warpYarnRate'];
+    final weftController = widget.controllers['weftYarnRate'];
+    final warpCurrent =
+    warpController == null ? null : double.tryParse(warpController.text.trim());
+    final weftCurrent =
+    weftController == null ? null : double.tryParse(weftController.text.trim());
+    setState(() {
+      if (warpController != null && warpCurrent != null) {
+        final converted =
+        unit == YarnRateUnit.perLb ? warpCurrent / 10 : warpCurrent * 10;
+        warpController.text = _formatForField(converted);
+      }
+      if (weftController != null && weftCurrent != null) {
+        final converted =
+        unit == YarnRateUnit.perLb ? weftCurrent / 10 : weftCurrent * 10;
+        weftController.text = _formatForField(converted);
+      }
+      _yarnRateUnit = unit;
+    });
+    widget.onYarnRateUnitChanged(unit);
+  }
+
   /// HOLD-TO-TALK — press down. Called from a Listener's onPointerDown,
   /// not a GestureDetector tap callback — see the class-level "HOLD-TO-
   /// TALK" doc comment for why that distinction matters.
@@ -892,6 +1012,14 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
   /// what makes the field "fill live while speaking" rather than only
   /// updating once at the end. The person can still type over any of
   /// this by hand at any time; nothing here is a one-way lock.
+  ///
+  /// STEP 20 note: for warpYarnRate/weftYarnRate specifically, the
+  /// number written here is taken to be ALREADY in whichever unit
+  /// _yarnRateUnit currently is — exactly like typing it by hand into
+  /// the matching field on the main screen would be. Nothing here
+  /// converts it; conversion only ever happens in _setYarnRateUnit()
+  /// when the toggle itself is flipped, same division of responsibility
+  /// as InputScreen.
   void _applyTranscriptToField(String raw) {
     final text = raw.trim();
     if (text.isEmpty) return;
@@ -1050,11 +1178,42 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
               ),
               const SizedBox(height: 20),
 
-              Text(
-                _fieldLabel,
-                textDirection: _isUrdu ? TextDirection.rtl : TextDirection.ltr,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      _fieldLabel,
+                      textDirection: _isUrdu ? TextDirection.rtl : TextDirection.ltr,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  // STEP 20 — shared per-lb/per-10lb toggle, shown only
+                  // on the Warp Yarn Rate / Weft Yarn Rate steps. Same
+                  // chip styling as InputScreen's own toggle, and reads/
+                  // writes the exact same shared unit — see
+                  // _showYarnRateToggle and _setYarnRateUnit() above.
+                  if (_showYarnRateToggle)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _unitChip(
+                          label: 'per lb',
+                          selected: _yarnRateUnit == YarnRateUnit.perLb,
+                          onTap: () => _setYarnRateUnit(YarnRateUnit.perLb),
+                          colorScheme: colorScheme,
+                        ),
+                        const SizedBox(width: 6),
+                        _unitChip(
+                          label: 'per 10 lb',
+                          selected: _yarnRateUnit == YarnRateUnit.perTenLb,
+                          onTap: () => _setYarnRateUnit(YarnRateUnit.perTenLb),
+                          colorScheme: colorScheme,
+                        ),
+                      ],
+                    ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
@@ -1166,6 +1325,41 @@ class _VoiceInputModalState extends State<VoiceInputModal> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  /// STEP 20 — same chip styling as InputScreen's own _unitChip(), kept
+  /// as a private copy here rather than shared/exported, since it's a
+  /// trivial 20-line presentational widget and sharing it would mean
+  /// adding yet another file to the import graph for no real benefit.
+  Widget _unitChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    required ColorScheme colorScheme,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? colorScheme.primaryContainer : colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? colorScheme.primary : colorScheme.outlineVariant,
+            width: selected ? 1.2 : 0.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );

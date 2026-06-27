@@ -33,19 +33,22 @@
 /// are completely unchanged and never see anything except the resolved
 /// per-10lb number, exactly as before.
 ///
-/// Mechanism: _warpYarnRateUnit / _weftYarnRateUnit track which unit the
-/// person is currently entering in (default: perTenLb, matching the
-/// previous behavior exactly). The TextField for each rate always shows
-/// whatever the person actually typed, in whichever unit is selected —
-/// it is NEVER silently rewritten to a converted number, since that
-/// would be confusing (type "12", watch it jump to "120"). Conversion
-/// only happens at the point those fields are READ for calculation —
-/// see _resolvedWarpYarnRate()/_resolvedWeftYarnRate(), which are used
-/// everywhere _recalculate() and the reverse solver previously read
-/// _controllers['warpYarnRate']/['weftYarnRate'] directly. When the
-/// person flips the toggle, the displayed number is converted ONCE (so
-/// switching units doesn't change the underlying real-world rate they
-/// meant), then stays in that new unit for further typing.
+/// Mechanism: there is a SINGLE shared `_yarnRateUnit` toggle that
+/// applies to BOTH Warp Yarn Rate and Weft Yarn Rate at once — Sadeed
+/// only ever enters both rates in the same unit, so one toggle (default:
+/// perTenLb, matching the previous behavior exactly) drives both fields
+/// instead of each field having its own. The TextField for each rate
+/// always shows whatever the person actually typed, in whichever unit is
+/// currently selected — it is NEVER silently rewritten to a converted
+/// number, since that would be confusing (type "12", watch it jump to
+/// "120"). Conversion only happens at the point those fields are READ
+/// for calculation — see _resolvedWarpYarnRate()/_resolvedWeftYarnRate(),
+/// which are used everywhere _recalculate() and the reverse solver
+/// previously read _controllers['warpYarnRate']/['weftYarnRate']
+/// directly. When the person flips the single toggle, BOTH displayed
+/// numbers are converted ONCE, together (so switching units doesn't
+/// change the real-world rates they meant), then both stay in that new
+/// unit for further typing.
 ///
 /// STEP 20 — SHRINKAGE FROM WEIGHT (alternate entry mode):
 /// The customer normally provides Warp/Weft Shrinkage % and Warp/Weft
@@ -101,12 +104,14 @@ import '../widgets/input_field_card.dart';
 import '../widgets/share_action_button.dart';
 import '../widgets/voice_input_modal.dart';
 import '../widgets/warp_blend_options.dart';
+import '../widgets/yarn_rate_unit.dart';
 import 'main_nav_shell.dart';
 
-/// Which unit the person is currently typing a yarn rate in. Purely a
-/// UI/entry concern — see the STEP 20 doc comment above. Internally
-/// everything still resolves to "per 10 lb" before reaching InputModel.
-enum YarnRateUnit { perLb, perTenLb }
+// YarnRateUnit itself now lives in widgets/yarn_rate_unit.dart — pulled
+// out to its own file so voice_input_modal.dart can share the exact
+// same enum (and the exact same live value, threaded through below)
+// without a circular import. See that file's doc comment for the full
+// story of the one-value-for-both-toggles design.
 
 class InputScreen extends StatefulWidget {
   const InputScreen({super.key});
@@ -167,12 +172,13 @@ class _InputScreenState extends State<InputScreen> {
 
   // ---------------------------------------------------------------------
   // STEP 20 — Yarn Rate unit toggle state.
-  // Default perTenLb matches the value that was always being typed in
-  // here before this feature existed, so existing users/history entries
-  // see no behavior change unless they explicitly switch a toggle.
+  // ONE shared toggle for BOTH Warp Yarn Rate and Weft Yarn Rate — see
+  // the STEP 20 doc comment at the top of this file. Default perTenLb
+  // matches the value that was always being typed in here before this
+  // feature existed, so existing users/history entries see no behavior
+  // change unless they explicitly switch the toggle.
   // ---------------------------------------------------------------------
-  YarnRateUnit _warpYarnRateUnit = YarnRateUnit.perTenLb;
-  YarnRateUnit _weftYarnRateUnit = YarnRateUnit.perTenLb;
+  YarnRateUnit _yarnRateUnit = YarnRateUnit.perTenLb;
 
   /// The resolved, ALWAYS-per-10lb number that should actually be fed
   /// into InputModel/calculation_engine.dart/reverse_solver.dart — use
@@ -182,47 +188,68 @@ class _InputScreenState extends State<InputScreen> {
   double? _resolvedWarpYarnRate() {
     final raw = double.tryParse(_controllers['warpYarnRate']!.text.trim());
     if (raw == null) return null;
-    return _warpYarnRateUnit == YarnRateUnit.perLb ? raw * 10 : raw;
+    return _yarnRateUnit == YarnRateUnit.perLb ? raw * 10 : raw;
   }
 
   double? _resolvedWeftYarnRate() {
     final raw = double.tryParse(_controllers['weftYarnRate']!.text.trim());
     if (raw == null) return null;
-    return _weftYarnRateUnit == YarnRateUnit.perLb ? raw * 10 : raw;
+    return _yarnRateUnit == YarnRateUnit.perLb ? raw * 10 : raw;
   }
 
-  /// Flips the unit for one of the two rate fields, converting the
-  /// CURRENTLY DISPLAYED number so the real-world rate the person meant
-  /// stays the same — e.g. "12" per-lb becomes "120" per-10lb, not left
-  /// at "12" now meaning something 10x smaller. Only runs the
-  /// conversion if the field currently holds a valid number; an empty
-  /// or invalid field just switches the unit with nothing to convert.
-  void _setWarpYarnRateUnit(YarnRateUnit unit) {
-    if (unit == _warpYarnRateUnit) return;
-    final controller = _controllers['warpYarnRate']!;
-    final current = double.tryParse(controller.text.trim());
+  /// Flips the SHARED unit for both Warp and Weft Yarn Rate, converting
+  /// the CURRENTLY DISPLAYED number in BOTH fields so the real-world
+  /// rates the person meant stay the same — e.g. "12" per-lb becomes
+  /// "120" per-10lb in both fields, not left at "12" now meaning
+  /// something 10x smaller. Each field is converted independently (only
+  /// if it currently holds a valid number); an empty or invalid field
+  /// just switches along with the unit, with nothing to convert.
+  ///
+  /// This is the version used when the toggle is flipped FROM THIS
+  /// SCREEN directly (the chip row in _ratesAndCostingSection). When the
+  /// toggle is instead flipped from inside VoiceInputModal, the modal
+  /// does its own identical conversion on the same controllers (since
+  /// widget.controllers IS this screen's _controllers, passed by
+  /// reference) and then calls _syncYarnRateUnitFromModal() instead —
+  /// see that method's doc comment for why a SEPARATE entry point was
+  /// needed rather than just calling this one again, which would have
+  /// converted the already-converted numbers a second time.
+  void _setYarnRateUnit(YarnRateUnit unit) {
+    if (unit == _yarnRateUnit) return;
+    final warpController = _controllers['warpYarnRate']!;
+    final weftController = _controllers['weftYarnRate']!;
+    final warpCurrent = double.tryParse(warpController.text.trim());
+    final weftCurrent = double.tryParse(weftController.text.trim());
     setState(() {
-      if (current != null) {
+      if (warpCurrent != null) {
         final converted =
-        unit == YarnRateUnit.perLb ? current / 10 : current * 10;
-        controller.text = _formatNumber(converted);
+        unit == YarnRateUnit.perLb ? warpCurrent / 10 : warpCurrent * 10;
+        warpController.text = _formatNumber(converted);
       }
-      _warpYarnRateUnit = unit;
+      if (weftCurrent != null) {
+        final converted =
+        unit == YarnRateUnit.perLb ? weftCurrent / 10 : weftCurrent * 10;
+        weftController.text = _formatNumber(converted);
+      }
+      _yarnRateUnit = unit;
     });
     _recalculate();
   }
 
-  void _setWeftYarnRateUnit(YarnRateUnit unit) {
-    if (unit == _weftYarnRateUnit) return;
-    final controller = _controllers['weftYarnRate']!;
-    final current = double.tryParse(controller.text.trim());
+  /// Counterpart to _setYarnRateUnit() above, used ONLY as the
+  /// onYarnRateUnitChanged callback passed into VoiceInputModal. The
+  /// modal converts both warpYarnRate/weftYarnRate controllers itself
+  /// (same math, same controllers, since they're shared by reference)
+  /// BEFORE calling this — so this just needs to record the new unit
+  /// and recalculate, without converting the numbers a second time.
+  /// Without this separate method, passing _setYarnRateUnit itself as
+  /// the callback would have re-run the /10-or-*10 conversion on values
+  /// the modal had already converted, silently corrupting both rates
+  /// every time the toggle was flipped from inside the voice modal.
+  void _syncYarnRateUnitFromModal(YarnRateUnit unit) {
+    if (unit == _yarnRateUnit) return;
     setState(() {
-      if (current != null) {
-        final converted =
-        unit == YarnRateUnit.perLb ? current / 10 : current * 10;
-        controller.text = _formatNumber(converted);
-      }
-      _weftYarnRateUnit = unit;
+      _yarnRateUnit = unit;
     });
     _recalculate();
   }
@@ -426,12 +453,13 @@ class _InputScreenState extends State<InputScreen> {
   /// STEP 20 note: warpYarnRate/weftYarnRate from a saved InputModel are
   /// always the resolved per-10lb number (that's all InputModel has ever
   /// stored) — reloading always displays them in per-10lb terms too,
-  /// resetting both unit toggles back to perTenLb. This is deliberate:
-  /// there's no stored record of which unit the person originally typed
-  /// in, so per-10lb (the unambiguous, calculation-native unit) is the
-  /// only safe default on reload. Same reasoning for shrinkage: a
-  /// reloaded entry always shows in normal %-entry mode, since there's
-  /// no stored "weight" value to repopulate the weight fields with.
+  /// resetting the shared unit toggle back to perTenLb. This is
+  /// deliberate: there's no stored record of which unit the person
+  /// originally typed in, so per-10lb (the unambiguous, calculation-
+  /// native unit) is the only safe default on reload. Same reasoning for
+  /// shrinkage: a reloaded entry always shows in normal %-entry mode,
+  /// since there's no stored "weight" value to repopulate the weight
+  /// fields with.
   void _fillControllersFrom(InputModel input) {
     _warpBlend = input.warpBlend;
     _controllers['ply']!.text = input.ply.toString();
@@ -466,10 +494,10 @@ class _InputScreenState extends State<InputScreen> {
     // sizingCostPerKg is read-only (lookup result), don't fill it —
     // it will auto-update when _recalculate() runs from the listeners.
 
-    // STEP 20 — reset both entry-mode toggles to their defaults on
-    // reload, per the doc comment above.
-    _warpYarnRateUnit = YarnRateUnit.perTenLb;
-    _weftYarnRateUnit = YarnRateUnit.perTenLb;
+    // STEP 20 — reset the shared yarn-rate unit toggle and the
+    // shrinkage-from-weight mode to their defaults on reload, per the
+    // doc comment above.
+    _yarnRateUnit = YarnRateUnit.perTenLb;
     _useWeightForShrinkage = false;
     _warpWeightController.clear();
     _weftWeightController.clear();
@@ -478,6 +506,19 @@ class _InputScreenState extends State<InputScreen> {
   }
 
   /// STEP 19 — opens the voice-fill modal as a bottom sheet.
+  ///
+  /// STEP 20 addition: also passes the shared yarnRateUnit value and
+  /// _syncYarnRateUnitFromModal as onYarnRateUnitChanged, exactly
+  /// mirroring how warpBlendValue/onWarpBlendChanged thread Warp Blend
+  /// through — so the modal's own per-lb/per-10lb toggle reads and
+  /// writes the SAME single unit as the main screen's, instead of
+  /// having its own independent copy that could drift out of sync.
+  /// _syncYarnRateUnitFromModal (NOT _setYarnRateUnit) is used here
+  /// deliberately — the modal already converts both rate controllers
+  /// itself before calling back, so this screen only needs to record
+  /// the new unit, not convert the numbers a second time. See
+  /// widgets/yarn_rate_unit.dart for why the enum had to move to its
+  /// own file to make this import possible.
   Future<void> _startVoiceInput() async {
     await showModalBottomSheet(
       context: context,
@@ -492,6 +533,8 @@ class _InputScreenState extends State<InputScreen> {
           _maybeUpdateSizingCost();
           _recalculate();
         },
+        yarnRateUnit: _yarnRateUnit,
+        onYarnRateUnitChanged: _syncYarnRateUnitFromModal,
       ),
     );
     if (!mounted) return;
@@ -661,6 +704,7 @@ class _InputScreenState extends State<InputScreen> {
           tooltip: 'Open Menu',
           onPressed: () => scaffoldKey.currentState?.openDrawer(),
         ),
+        titleSpacing: 0,
         title: Row(
           children: [
             Container(
@@ -680,6 +724,7 @@ class _InputScreenState extends State<InputScreen> {
                 ),
               ),
             ),
+            const SizedBox(width: 10),
             const Text('TrendTex', style: TextStyle(fontSize: 16)),
           ],
         ),
@@ -734,25 +779,7 @@ class _InputScreenState extends State<InputScreen> {
                       _field('writing', 'Writing', type: FieldType.text),
                     ]),
                     _shrinkageWastageSection(),
-                    _section('Rates & Costing', [
-                      _yarnRateField(
-                        key: 'warpYarnRate',
-                        label: 'Warp Yarn Rate',
-                        unit: _warpYarnRateUnit,
-                        onUnitChanged: _setWarpYarnRateUnit,
-                      ),
-                      _yarnRateField(
-                        key: 'weftYarnRate',
-                        label: 'Weft Yarn Rate',
-                        unit: _weftYarnRateUnit,
-                        onUnitChanged: _setWeftYarnRateUnit,
-                      ),
-                      _field('sizingCostPerKg', 'Sizing Cost / Kg'),
-                      _field('commissionPct', 'Commission %'),
-                      _field('inputPerPick', 'Input Per Pick'),
-                      _field('packingCost', 'Packing Cost'),
-                      _field('freightCost', 'Freight Cost'),
-                    ]),
+                    _ratesAndCostingSection(),
                     _section('Off Grade', [
                       _field('offGradePct', 'Off Grade %'),
                       _field('offGradeRecovery', 'Off Grade Recovery'),
@@ -861,9 +888,9 @@ class _InputScreenState extends State<InputScreen> {
                 SizedBox(
                   width: halfWidth,
                   child: InputFieldCard(
-                    label: 'Warp Weight',
-                    controller: _warpWeightController,
-                    type: FieldType.number
+                      label: 'Warp Weight',
+                      controller: _warpWeightController,
+                      type: FieldType.number
                   ),
                 ),
                 SizedBox(
@@ -976,52 +1003,81 @@ class _InputScreenState extends State<InputScreen> {
     );
   }
 
-  /// STEP 20 — Warp/Weft Yarn Rate field with its per-lb / per-10lb
-  /// toggle. The underlying TextField is the SAME _controllers entry as
-  /// before (unchanged key, unchanged width/layout) — only a small unit
-  /// switcher is added above it. See _resolvedWarpYarnRate()/
-  /// _resolvedWeftYarnRate() for where the actual conversion happens;
-  /// nothing here touches the displayed text based on the unit, only on
-  /// an explicit toggle action (_setWarpYarnRateUnit/
-  /// _setWeftYarnRateUnit).
-  Widget _yarnRateField({
-    required String key,
-    required String label,
-    required YarnRateUnit unit,
-    required ValueChanged<YarnRateUnit> onUnitChanged,
-  }) {
+  /// STEP 20 — "Rates & Costing" section. Warp Yarn Rate and Weft Yarn
+  /// Rate sit side by side as before, but now share ONE unit toggle
+  /// (per lb / per 10 lb) rendered once for the pair, instead of each
+  /// field carrying its own toggle underneath it. Flipping this toggle
+  /// converts BOTH fields together — see _setYarnRateUnit().
+  Widget _ratesAndCostingSection() {
+    final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final usableWidth = screenWidth - 32;
     final halfWidth = (usableWidth - 8) / 2;
-    final colorScheme = Theme.of(context).colorScheme;
 
-    return SizedBox(
-      width: halfWidth,
+    return Padding(
+      padding: const EdgeInsets.only(top: 14, bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InputFieldCard(
-            label: label,
-            controller: _controllers[key]!,
-            type: FieldType.number,
-          ),
-          const SizedBox(height: 4),
           Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              _unitChip(
-                label: 'per lb',
-                selected: unit == YarnRateUnit.perLb,
-                onTap: () => onUnitChanged(YarnRateUnit.perLb),
-                colorScheme: colorScheme,
+              Expanded(
+                child: Text(
+                  'RATES & COSTING',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ),
-              const SizedBox(width: 6),
-              _unitChip(
-                label: 'per 10 lb',
-                selected: unit == YarnRateUnit.perTenLb,
-                onTap: () => onUnitChanged(YarnRateUnit.perTenLb),
-                colorScheme: colorScheme,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _unitChip(
+                    label: 'per lb',
+                    selected: _yarnRateUnit == YarnRateUnit.perLb,
+                    onTap: () => _setYarnRateUnit(YarnRateUnit.perLb),
+                    colorScheme: colorScheme,
+                  ),
+                  const SizedBox(width: 6),
+                  _unitChip(
+                    label: 'per 10 lb',
+                    selected: _yarnRateUnit == YarnRateUnit.perTenLb,
+                    onTap: () => _setYarnRateUnit(YarnRateUnit.perTenLb),
+                    colorScheme: colorScheme,
+                  ),
+                ],
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              SizedBox(
+                width: halfWidth,
+                child: InputFieldCard(
+                  label: 'Warp Yarn Rate',
+                  controller: _controllers['warpYarnRate']!,
+                  type: FieldType.number,
+                ),
+              ),
+              SizedBox(
+                width: halfWidth,
+                child: InputFieldCard(
+                  label: 'Weft Yarn Rate',
+                  controller: _controllers['weftYarnRate']!,
+                  type: FieldType.number,
+                ),
+              ),
+              _field('sizingCostPerKg', 'Sizing Cost / Kg'),
+              _field('commissionPct', 'Commission %'),
+              _field('inputPerPick', 'Input Per Pick'),
+              _field('packingCost', 'Packing Cost'),
+              _field('freightCost', 'Freight Cost'),
             ],
           ),
         ],
